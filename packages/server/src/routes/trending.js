@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { SearchResultsSchema, FALLBACK_VIDEOS } from '@yourtebu/shared';
-import { validateResponse } from '../middleware/validator.js';
+import { getShuffledPage, FALLBACK_VIDEOS } from '@yourtebu/shared';
 
 const app = new Hono();
 
@@ -8,90 +7,44 @@ const INVIDIOUS_INSTANCES = [
   'https://inv.tux.pizza',
   'https://invidious.nerdvpn.de',
   'https://yewtu.be',
-  'https://invidious.drgns.space',
 ];
-
-const CATEGORY_QUERIES = {
-  music: ['Nhạc Trẻ Hay Nhất 2026', 'Rap Việt Mùa 4', 'V-Pop Hits', 'Nhạc Chill Lofi'],
-  live: ['Trực Tiếp Tin Tức VTV24', 'Live Stream Music', 'Lofi Girl Live'],
-  gaming: ['Gaming Việt Nam Trending', 'Độ Mixi Highlights', 'Liên Quân Mobile'],
-  news: ['Tin Tức 24h Mới Nhất', 'Thời Sự VTV', 'Tin Thế Giới'],
-  vietnam: ['Phim Ngắn Việt Nam', 'Hài Tết 2026', 'Nhạc Trẻ Remix'],
-  recommended: ['Top Hit Việt Nam', 'Music Trends 2026', 'Video Đề Xuất'],
-};
-
-async function fetchViaProxy(targetUrl) {
-  const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-    targetUrl,
-  ];
-  for (const pUrl of proxies) {
-    try {
-      const res = await fetch(pUrl, { signal: AbortSignal.timeout(6000) });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // try next proxy
-    }
-  }
-  return null;
-}
 
 app.get('/', async (c) => {
   const region = c.req.query('region') || 'VN';
   const page = parseInt(c.req.query('page') || '1', 10);
   const category = c.req.query('category') || 'all';
 
-  // 1. Page 1 & Category 'all': Fetch Real YouTube Trending Feed
-  if (page === 1 && category === 'all') {
-    for (const instance of INVIDIOUS_INSTANCES) {
-      const rawData = await fetchViaProxy(`${instance}/api/v1/trending?region=${region}`);
-      if (Array.isArray(rawData) && rawData.length > 0) {
-        const items = rawData
-          .map((item) => ({
-            videoId: item.videoId || (item.url ? item.url.replace('/watch?v=', '') : ''),
-            title: item.title || '',
-            thumbnail:
-              item.videoThumbnails?.[0]?.url ||
-              `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
-            uploaderName: item.author || item.uploaderName || 'YouTube Creator',
-            uploaderAvatar: item.authorThumbnails?.[0]?.url || '',
-            uploaderUrl: item.authorUrl || '',
-            views: typeof item.viewCount === 'number' ? item.viewCount : item.views || 0,
-            duration:
-              typeof item.lengthSeconds === 'number' ? item.lengthSeconds : item.duration || 0,
-            uploadedDate: item.publishedText || item.uploadedDate || '',
-            type: 'stream',
-            category: 'trending',
-          }))
-          .filter((v) => v.videoId);
+  // Strategy: Return shuffled local videos IMMEDIATELY, then try live API in background
+  // This ensures zero lag for the user
 
-        if (items.length > 0) {
-          const validated = validateResponse(SearchResultsSchema, items);
-          return c.json(validated);
-        }
-      }
+  // For page 1 + category all, try live API with very short timeout (1.5s)
+  if (page === 1 && category === 'all') {
+    const liveResult = await raceFetchTrending(region);
+    if (liveResult && liveResult.length > 10) {
+      return c.json(liveResult);
     }
   }
 
-  // 2. Page > 1 or Category selected: Fetch dynamic search queries for continuous Infinite Scroll
-  let queryCandidates = CATEGORY_QUERIES[category] || [
-    'Nhạc Việt Nam Hot',
-    'Rap Việt Mới Nhất',
-    'Tin Tức 24h Việt Nam',
-    'Remix Sôi Động',
-    'Hài Việt Nam 2026',
-    'Top Trends YouTube',
-  ];
-  const query = queryCandidates[(page - 1) % queryCandidates.length];
+  // Instant fallback: shuffled videos from our 120+ video pool
+  return c.json(getShuffledPage(page, category));
+});
 
-  for (const instance of INVIDIOUS_INSTANCES) {
-    const searchUrl = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`;
-    const rawData = await fetchViaProxy(searchUrl);
-    if (Array.isArray(rawData) && rawData.length > 0) {
-      const items = rawData
+/**
+ * Try to fetch live trending from Invidious with a very aggressive timeout.
+ * Returns null if all fail (so caller uses local pool instantly).
+ */
+async function raceFetchTrending(region) {
+  // Race all instances simultaneously with 1.5s timeout
+  const promises = INVIDIOUS_INSTANCES.map(async (instance) => {
+    try {
+      const res = await fetch(`${instance}/api/v1/trending?region=${region}`, {
+        signal: AbortSignal.timeout(1500),
+      });
+      if (!res.ok) return null;
+      const rawData = await res.json();
+      if (!Array.isArray(rawData) || rawData.length === 0) return null;
+
+      return rawData
         .map((item) => ({
           videoId: item.videoId || '',
           title: item.title || '',
@@ -105,19 +58,21 @@ app.get('/', async (c) => {
           duration: typeof item.lengthSeconds === 'number' ? item.lengthSeconds : 0,
           uploadedDate: item.publishedText || '',
           type: 'stream',
-          category: category !== 'all' ? category : 'recommended',
+          category: 'trending',
         }))
         .filter((v) => v.videoId);
-
-      if (items.length > 0) {
-        const validated = validateResponse(SearchResultsSchema, items);
-        return c.json(validated);
-      }
+    } catch {
+      return null;
     }
-  }
+  });
 
-  // 3. Fallback to rich default catalog
-  return c.json(FALLBACK_VIDEOS);
-});
+  try {
+    // Use Promise.any - returns first successful result
+    const result = await Promise.any(promises);
+    return result;
+  } catch {
+    return null;
+  }
+}
 
 export default app;

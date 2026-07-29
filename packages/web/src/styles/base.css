@@ -66,3 +66,9 @@ img {
   background: var(--bg-hover);
   border-radius: var(--radius-full);
 }
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -433,19 +433,6 @@ async function openVideo(videoId) {
   }
 }
 
-// Ensure array has at least minLength items filling the entire screen
-function ensureRichList(list, minLength = 20) {
-  let result = Array.isArray(list) ? [...list] : [];
-  if (result.length < minLength) {
-    FALLBACK_VIDEOS.forEach((item) => {
-      if (result.length < minLength && !result.some((v) => v.videoId === item.videoId)) {
-        result.push(item);
-      }
-    });
-  }
-  return result;
-}
-
 function registerLoadedVideoIds(videos) {
   if (Array.isArray(videos)) {
     videos.forEach((v) => {
@@ -454,32 +441,7 @@ function registerLoadedVideoIds(videos) {
   }
 }
 
-function appendLoadMoreButton(container) {
-  const existingBtn = $('#btn-load-more-container');
-  if (existingBtn) existingBtn.remove();
-
-  const loadMoreContainer = document.createElement('div');
-  loadMoreContainer.id = 'btn-load-more-container';
-  loadMoreContainer.style.gridColumn = '1 / -1';
-  loadMoreContainer.style.textAlign = 'center';
-  loadMoreContainer.style.padding = '30px 0 10px';
-
-  loadMoreContainer.innerHTML = `
-    <button id="btn-manual-load-more" style="padding:10px 24px; background:var(--bg-tertiary); color:var(--text-link); border:1px solid var(--border-color); border-radius:var(--radius-full); font-weight:600; cursor:pointer; font-size:14px; transition:all 0.2s ease;">
-      👇 ${getLang() === 'vi' ? 'Tải thêm video đề xuất...' : 'Load more recommendations...'}
-    </button>
-  `;
-
-  const grid = container.querySelector('.video-grid');
-  if (grid) {
-    grid.appendChild(loadMoreContainer);
-    $('#btn-manual-load-more')?.addEventListener('click', () => {
-      loadMoreVideos();
-    });
-  }
-}
-
-// Views with rich full-screen video grid filling entire screen & Infinite Scroll
+// Views - Server handles shuffling & pagination, frontend just renders
 async function renderHome() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
@@ -498,23 +460,12 @@ async function renderHome() {
   }
 
   try {
-    let rawVideos = await fetchTrending('VN', 1, state.activeCategory);
-    let videos = ensureRichList(rawVideos, 20);
-
-    if (state.user) {
-      videos = [...videos].reverse();
-    }
-
+    const videos = await fetchTrending('VN', 1, state.activeCategory);
     registerLoadedVideoIds(videos);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
-    appendLoadMoreButton(container);
   } catch {
-    const displayList = state.user ? [...FALLBACK_VIDEOS].reverse() : FALLBACK_VIDEOS;
-    registerLoadedVideoIds(displayList);
-    container.innerHTML = `${personalizedBadge}<div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
-    appendLoadMoreButton(container);
+    container.innerHTML = `${personalizedBadge}<div class="video-grid"><p style="color:var(--text-secondary); grid-column:1/-1;">Không thể tải video. Hãy thử lại sau.</p></div>`;
   }
 }
 
@@ -522,17 +473,12 @@ async function renderTrending() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
   try {
-    const rawVideos = await fetchTrending('VN', 1, 'all');
-    const displayList = ensureRichList(rawVideos, 20);
-    registerLoadedVideoIds(displayList);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
+    const videos = await fetchTrending('VN', 1, 'all');
+    registerLoadedVideoIds(videos);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
-    appendLoadMoreButton(container);
   } catch {
-    registerLoadedVideoIds(FALLBACK_VIDEOS);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
-    appendLoadMoreButton(container);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><p style="color:var(--text-secondary);">Không thể tải video.</p>`;
   }
 }
 
@@ -540,17 +486,12 @@ async function renderMusic() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
   try {
-    const rawVideos = await fetchSearchResults('music', 'all', 1);
-    const displayList = ensureRichList(rawVideos, 20);
-    registerLoadedVideoIds(displayList);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
+    const videos = await fetchSearchResults('music', 'all', 1);
+    registerLoadedVideoIds(videos);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
-    appendLoadMoreButton(container);
   } catch {
-    registerLoadedVideoIds(FALLBACK_VIDEOS);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
-    appendLoadMoreButton(container);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><p style="color:var(--text-secondary);">Không thể tải video.</p>`;
   }
 }
 
@@ -563,18 +504,12 @@ async function renderSearch(query) {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(12)}</div>`;
   try {
-    const results = await fetchSearchResults(query, 'all', 1);
-    const displayList = ensureRichList(results, 16);
-    registerLoadedVideoIds(displayList);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
+    const videos = await fetchSearchResults(query, 'all', 1);
+    registerLoadedVideoIds(videos);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
-    appendLoadMoreButton(container);
   } catch {
-    const displayList = getFallbackSearch(query);
-    registerLoadedVideoIds(displayList);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
-    appendLoadMoreButton(container);
+    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><p style="color:var(--text-secondary);">Không tìm thấy kết quả.</p>`;
   }
 }
 
@@ -599,58 +534,30 @@ async function loadMoreVideos() {
   state.isLoadingMore = true;
   state.page += 1;
 
-  // Remove manual button if present
-  const manualBtnBox = $('#btn-load-more-container');
-  if (manualBtnBox) manualBtnBox.remove();
-
-  // Render Skeleton Loader indicator at bottom of grid
+  // Show small loading indicator
   const loaderEl = document.createElement('div');
   loaderEl.id = 'infinite-loader-box';
   loaderEl.style.gridColumn = '1 / -1';
-  loaderEl.style.display = 'grid';
-  loaderEl.style.gap = '20px';
-  loaderEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
-  loaderEl.style.padding = '20px 0';
-  loaderEl.innerHTML = renderSkeletons(4);
+  loaderEl.style.textAlign = 'center';
+  loaderEl.style.padding = '20px';
+  loaderEl.innerHTML =
+    '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border-color);border-top-color:var(--text-link);border-radius:50%;animation:spin 0.8s linear infinite;"></div>';
   grid.appendChild(loaderEl);
 
   try {
-    let rawItems = [];
+    let newVideos = [];
     if (state.currentView === 'home' || state.currentView === 'trending') {
-      rawItems = await fetchTrending('VN', state.page, state.activeCategory);
+      newVideos = await fetchTrending('VN', state.page, state.activeCategory);
     } else if (state.currentView === 'music') {
-      rawItems = await fetchSearchResults('music', 'all', state.page);
+      newVideos = await fetchSearchResults('music', 'all', state.page);
     } else if (state.currentView === 'search' && state.currentSearchQuery) {
-      rawItems = await fetchSearchResults(state.currentSearchQuery, 'all', state.page);
+      newVideos = await fetchSearchResults(state.currentSearchQuery, 'all', state.page);
     }
 
     loaderEl.remove();
 
-    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    if (!Array.isArray(newVideos) || newVideos.length === 0) {
       state.hasMore = false;
-      state.isLoadingMore = false;
-      return;
-    }
-
-    // Filter duplicates
-    const newVideos = rawItems.filter((v) => v.videoId && !state.loadedVideoIds.has(v.videoId));
-    if (newVideos.length === 0) {
-      // If page had duplicate candidates, fallback to adding items with fresh index
-      const remainingItems = rawItems.filter((v) => v.videoId).slice(0, 10);
-      remainingItems.forEach((v) => {
-        state.loadedVideoIds.add(v.videoId + '_' + state.page);
-      });
-      if (remainingItems.length > 0) {
-        const tempWrapper = document.createElement('div');
-        tempWrapper.innerHTML = remainingItems
-          .map((v, i) => renderCard(v, state.page * 10 + i))
-          .join('');
-        Array.from(tempWrapper.children).forEach((card) => grid.appendChild(card));
-        attachCardEvents($('#view-container'));
-        appendLoadMoreButton($('#view-container'));
-      } else {
-        state.hasMore = false;
-      }
       state.isLoadingMore = false;
       return;
     }
@@ -658,18 +565,11 @@ async function loadMoreVideos() {
     registerLoadedVideoIds(newVideos);
 
     const tempWrapper = document.createElement('div');
-    tempWrapper.innerHTML = newVideos.map((v, i) => renderCard(v, state.page * 10 + i)).join('');
-    const newCards = Array.from(tempWrapper.children);
-
-    newCards.forEach((card) => {
-      grid.appendChild(card);
-    });
-
+    tempWrapper.innerHTML = newVideos.map((v, i) => renderCard(v, state.page * 20 + i)).join('');
+    Array.from(tempWrapper.children).forEach((card) => grid.appendChild(card));
     attachCardEvents($('#view-container'));
-    appendLoadMoreButton($('#view-container'));
   } catch {
     loaderEl.remove();
-    state.hasMore = false;
   } finally {
     state.isLoadingMore = false;
   }

@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
-import { SearchResultsSchema, getFallbackSearch } from '@yourtebu/shared';
-import { validateResponse } from '../middleware/validator.js';
+import { getFallbackSearch } from '@yourtebu/shared';
 
 const app = new Hono();
 
@@ -8,27 +7,7 @@ const INVIDIOUS_INSTANCES = [
   'https://inv.tux.pizza',
   'https://invidious.nerdvpn.de',
   'https://yewtu.be',
-  'https://invidious.drgns.space',
 ];
-
-async function fetchViaProxy(targetUrl) {
-  const proxies = [
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-    `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
-    targetUrl,
-  ];
-  for (const pUrl of proxies) {
-    try {
-      const res = await fetch(pUrl, { signal: AbortSignal.timeout(6000) });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // try next
-    }
-  }
-  return null;
-}
 
 app.get('/', async (c) => {
   const query = c.req.query('q') || '';
@@ -38,12 +17,26 @@ app.get('/', async (c) => {
     return c.json(getFallbackSearch(''));
   }
 
-  // 1. Try Invidious search API via CORS proxies
-  for (const instance of INVIDIOUS_INSTANCES) {
-    const searchUrl = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`;
-    const rawData = await fetchViaProxy(searchUrl);
-    if (Array.isArray(rawData) && rawData.length > 0) {
-      const items = rawData
+  // Try live search with 1.5s race timeout
+  const liveResult = await raceSearch(query, page);
+  if (liveResult && liveResult.length > 0) {
+    return c.json(liveResult);
+  }
+
+  // Instant fallback
+  return c.json(getFallbackSearch(query));
+});
+
+async function raceSearch(query, page) {
+  const promises = INVIDIOUS_INSTANCES.map(async (instance) => {
+    try {
+      const url = `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
+      if (!res.ok) return null;
+      const rawData = await res.json();
+      if (!Array.isArray(rawData) || rawData.length === 0) return null;
+
+      return rawData
         .map((item) => ({
           videoId: item.videoId || '',
           title: item.title || '',
@@ -59,15 +52,16 @@ app.get('/', async (c) => {
           type: 'stream',
         }))
         .filter((v) => v.videoId);
-
-      if (items.length > 0) {
-        const validated = validateResponse(SearchResultsSchema, items);
-        return c.json(validated);
-      }
+    } catch {
+      return null;
     }
-  }
+  });
 
-  return c.json(getFallbackSearch(query));
-});
+  try {
+    return await Promise.any(promises);
+  } catch {
+    return null;
+  }
+}
 
 export default app;
