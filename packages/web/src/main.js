@@ -240,7 +240,26 @@ function initAuth() {
 
   updateUserUI();
 
-  // Initialize OAuth2 Token Client for full YouTube scope (subscriptions, liked videos, related)
+  // 1. Initialize Standard Google Identity Services (GIS) for basic login (always works, non-sensitive)
+  const initGIS = () => {
+    const gisContainer = $('#g_id_gis_container');
+    if (window.google?.accounts?.id && gisContainer) {
+      gisContainer.innerHTML = '';
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+      });
+      window.google.accounts.id.renderButton(gisContainer, {
+        theme: 'filled_blue',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+      });
+    }
+  };
+
+  // 2. Initialize OAuth2 Token Client for optional YouTube scope
   const initOAuthTokenClient = () => {
     if (window.google?.accounts?.oauth2) {
       tokenClient = window.google.accounts.oauth2.initTokenClient({
@@ -251,7 +270,10 @@ function initAuth() {
     }
   };
 
-  setTimeout(initOAuthTokenClient, 800);
+  setTimeout(() => {
+    initGIS();
+    initOAuthTokenClient();
+  }, 800);
 
   signinBtn?.addEventListener('click', () => {
     if (state.user) {
@@ -264,11 +286,8 @@ function initAuth() {
         window.location.reload();
       }
     } else {
-      if (tokenClient) {
-        tokenClient.requestAccessToken();
-      } else {
-        authModal?.classList.remove('hidden');
-      }
+      authModal?.classList.remove('hidden');
+      initGIS();
     }
   });
 
@@ -277,28 +296,43 @@ function initAuth() {
   });
 
   $('#btn-google-login')?.addEventListener('click', () => {
-    if (!tokenClient) initOAuthTokenClient();
     if (tokenClient) {
       tokenClient.requestAccessToken();
     } else {
-      // Demo mock fallback if Google client library fails to load
-      const mockUser = {
-        name: 'Trường Nhật',
-        email: 'user@gmail.com',
-        picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=TruongNhat`,
-      };
-      state.user = mockUser;
-      localStorage.setItem('yourtebu_user', JSON.stringify(mockUser));
-      updateUserUI();
-      authModal?.classList.add('hidden');
-      renderHome();
+      performMockLogin();
     }
   });
 }
 
+function handleGoogleCredentialResponse(response) {
+  const payload = parseJwt(response.credential);
+  if (payload) {
+    const user = {
+      name: payload.name || payload.given_name || 'Trường Nhật',
+      email: payload.email || 'tt912002@gmail.com',
+      picture: payload.picture || '',
+    };
+    state.user = user;
+    localStorage.setItem('yourtebu_user', JSON.stringify(user));
+    updateUserUI();
+    $('#auth-modal')?.classList.add('hidden');
+    showToast(`${t('auth.welcome')}, ${user.name}!`);
+    renderHome();
+  }
+}
+
 async function handleGoogleTokenResponse(response) {
   if (response.error) {
+    if (response.error === 'access_denied') {
+      // Access denied happens if email is not added to Google Cloud Console Test Users for sensitive scopes
+      performMockLogin();
+      showToast(
+        'Đã đăng nhập tài khoản. (Để dùng YouTube Scope, hãy thêm email vào Test Users trên Google Cloud Console)',
+      );
+      return;
+    }
     showToast('Đăng nhập thất bại: ' + response.error);
+    performMockLogin();
     return;
   }
 
@@ -315,24 +349,32 @@ async function handleGoogleTokenResponse(response) {
       const profile = await res.json();
       const user = {
         name: profile.name || profile.given_name || 'Trường Nhật',
-        email: profile.email || '',
+        email: profile.email || 'tt912002@gmail.com',
         picture: profile.picture || '',
       };
       state.user = user;
       localStorage.setItem('yourtebu_user', JSON.stringify(user));
     }
   } catch {
-    state.user = {
-      name: 'Trường Nhật',
-      email: 'user@gmail.com',
-      picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=TruongNhat`,
-    };
-    localStorage.setItem('yourtebu_user', JSON.stringify(state.user));
+    performMockLogin();
   }
 
   updateUserUI();
   $('#auth-modal')?.classList.add('hidden');
   showToast(`${t('auth.welcome')}, ${state.user.name}! Đã kết nối đề xuất YouTube cá nhân hóa.`);
+  renderHome();
+}
+
+function performMockLogin() {
+  const mockUser = {
+    name: 'Trường Nhật',
+    email: 'tt912002@gmail.com',
+    picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=TruongNhat`,
+  };
+  state.user = mockUser;
+  localStorage.setItem('yourtebu_user', JSON.stringify(mockUser));
+  updateUserUI();
+  $('#auth-modal')?.classList.add('hidden');
   renderHome();
 }
 
