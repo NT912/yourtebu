@@ -10,16 +10,20 @@ export async function fetchVideoInfo(videoId) {
   return await res.json();
 }
 
-export async function fetchSearchResults(query, filter = 'all') {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&filter=${filter}`);
+export async function fetchSearchResults(query, filter = 'all', page = 1) {
+  const res = await fetch(
+    `/api/search?q=${encodeURIComponent(query)}&filter=${filter}&page=${page}`,
+  );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: Search failed`);
   }
   return await res.json();
 }
 
-export async function fetchTrending(region = 'VN') {
-  const res = await fetch(`/api/trending?region=${region}`);
+export async function fetchTrending(region = 'VN', page = 1, category = 'all') {
+  const res = await fetch(
+    `/api/trending?region=${region}&page=${page}&category=${encodeURIComponent(category)}`,
+  );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}: Trending failed`);
   }

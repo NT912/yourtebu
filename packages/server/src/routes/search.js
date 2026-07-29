@@ -14,6 +14,7 @@ const INVIDIOUS_INSTANCES = [
 app.get('/', async (c) => {
   const query = c.req.query('q') || '';
   const filter = c.req.query('filter') || 'all';
+  const page = parseInt(c.req.query('page') || '1', 10);
 
   if (!query) {
     return c.json(getFallbackSearch(''));
@@ -23,7 +24,7 @@ app.get('/', async (c) => {
   for (const instance of INVIDIOUS_INSTANCES) {
     try {
       const res = await fetch(
-        `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video`,
+        `${instance}/api/v1/search?q=${encodeURIComponent(query)}&type=video&page=${page}`,
         {
           signal: AbortSignal.timeout(4000),
         },

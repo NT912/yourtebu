@@ -34,6 +34,11 @@ const state = {
   activeCategory: 'all',
   user: initialUser,
   history: JSON.parse(localStorage.getItem('yourtebu_history') || '[]'),
+  page: 1,
+  isLoadingMore: false,
+  hasMore: true,
+  loadedVideoIds: new Set(),
+  currentSearchQuery: '',
 };
 
 // DOM Refs
@@ -52,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initPlayer();
   initModals();
+  initInfiniteScroll();
 
   handleRoute();
 });
@@ -59,6 +65,13 @@ document.addEventListener('DOMContentLoaded', () => {
 // Router
 function initRouter() {
   window.addEventListener('hashchange', handleRoute);
+}
+
+function resetPaginationState() {
+  state.page = 1;
+  state.isLoadingMore = false;
+  state.hasMore = true;
+  state.loadedVideoIds.clear();
 }
 
 function handleRoute() {
@@ -77,31 +90,40 @@ function handleRoute() {
     state.liveChat = null;
   }
 
+  resetPaginationState();
+
   switch (path) {
     case '/':
     case '/home':
+      state.currentView = 'home';
       $('#chips-bar')?.classList.remove('hidden');
       renderHome();
       break;
     case '/trending':
+      state.currentView = 'trending';
       $('#chips-bar')?.classList.add('hidden');
       renderTrending();
       break;
     case '/music':
+      state.currentView = 'music';
       $('#chips-bar')?.classList.add('hidden');
       renderMusic();
       break;
     case '/history':
+      state.currentView = 'history';
       $('#chips-bar')?.classList.add('hidden');
       renderHistory();
       break;
     case '/search': {
+      state.currentView = 'search';
       $('#chips-bar')?.classList.add('hidden');
       const q = new URLSearchParams(params).get('q');
+      state.currentSearchQuery = q || '';
       if (q) renderSearch(q);
       break;
     }
     default:
+      state.currentView = 'home';
       renderHome();
   }
 }
@@ -117,6 +139,20 @@ function initHeader() {
     if (e.key === 'Enter') {
       const q = searchInput.value.trim();
       if (q) window.location.hash = `#/search?q=${encodeURIComponent(q)}`;
+    }
+  });
+
+  // Dynamic Home Logo Click Refresh
+  $('.header__logo')?.addEventListener('click', (e) => {
+    if (
+      window.location.hash === '#/' ||
+      window.location.hash === '' ||
+      window.location.hash === '#/home'
+    ) {
+      e.preventDefault();
+      resetPaginationState();
+      renderHome();
+      showToast(t('common.refreshing') || 'Đang làm mới đề xuất...');
     }
   });
 
@@ -184,6 +220,7 @@ function initChipsBar() {
       chips.forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.activeCategory = chip.dataset.category || 'all';
+      resetPaginationState();
       renderHome();
     });
   });
@@ -198,118 +235,92 @@ function initAuth() {
   // Initialize Real Google Identity Services (GIS) with user's official OAuth Client ID
   const initGIS = () => {
     const gisContainer = $('#g_id_gis_container');
-    const fallbackBtn = $('#btn-google-login');
-
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: window.handleCredentialResponse,
-          auto_select: false,
-        });
-
-        if (gisContainer) {
-          gisContainer.innerHTML = '';
-          window.google.accounts.id.renderButton(gisContainer, {
-            theme: getTheme() === 'dark' ? 'filled_black' : 'outline',
-            size: 'large',
-            shape: 'pill',
-            text: 'signin_with',
-            width: 250,
-          });
-          if (fallbackBtn) fallbackBtn.style.display = 'none';
-        }
-      } catch {
-        if (fallbackBtn) fallbackBtn.style.display = 'inline-flex';
-      }
-    } else {
-      if (fallbackBtn) fallbackBtn.style.display = 'inline-flex';
+    if (window.google?.accounts?.id && gisContainer) {
+      gisContainer.innerHTML = '';
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+      });
+      window.google.accounts.id.renderButton(gisContainer, {
+        theme: 'filled_blue',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+      });
     }
   };
 
-  setTimeout(initGIS, 600);
+  setTimeout(initGIS, 800);
 
   signinBtn?.addEventListener('click', () => {
     if (state.user) {
-      // User is logged in -> Sign out action -> Clear session and RELOAD PAGE IMMEDIATELY!
-      if (window.google?.accounts?.id) {
-        try {
-          window.google.accounts.id.disableAutoSelect();
-        } catch {
-          /* ignore */
-        }
+      if (confirm(t('auth.signOutConfirm') || 'Bạn có muốn đăng xuất không?')) {
+        state.user = null;
+        localStorage.removeItem('yourtebu_user');
+        updateUserUI();
+        window.location.reload();
       }
-      state.user = null;
-      localStorage.removeItem('yourtebu_user');
-      showToast(t('auth.signOut'));
-      setTimeout(() => window.location.reload(), 300);
     } else {
-      // Show Google login modal
       authModal?.classList.remove('hidden');
-      if (window.google?.accounts?.id) {
-        try {
-          window.google.accounts.id.prompt();
-        } catch {
-          /* ignore */
-        }
-      }
+      initGIS();
     }
   });
 
-  $('#auth-close')?.addEventListener('click', () => authModal?.classList.add('hidden'));
-  authModal
-    ?.querySelector('.modal__backdrop')
-    ?.addEventListener('click', () => authModal?.classList.add('hidden'));
-
-  // Unified Google Sign-in Button -> Authenticates, saves user session, and RELOADS PAGE!
-  $('#btn-google-login')?.addEventListener('click', () => {
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.prompt();
-        return;
-      } catch {
-        /* fallback below */
-      }
-    }
-
-    state.user = {
-      name: 'Trường Nhật',
-      email: 'user@gmail.com',
-      avatar: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
-    };
-    localStorage.setItem('yourtebu_user', JSON.stringify(state.user));
+  $('#auth-close')?.addEventListener('click', () => {
     authModal?.classList.add('hidden');
-    // Reload page immediately to fetch personalized feed matching user session!
-    window.location.reload();
   });
 
-  window.handleCredentialResponse = (response) => {
-    try {
-      // Decode JWT token with UTF-8 decoding to preserve Vietnamese names
-      const payload = parseJwt(response.credential);
-      state.user = {
-        name: payload?.name || payload?.given_name || payload?.email || 'Trường Nhật',
-        email: payload?.email || 'user@gmail.com',
-        avatar: payload?.picture || 'https://lh3.googleusercontent.com/a/default-user=s96-c',
+  $('#btn-google-login')?.addEventListener('click', () => {
+    initGIS();
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
+    } else {
+      const mockUser = {
+        name: 'Trường Nhật',
+        email: 'user@gmail.com',
+        picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=TruongNhat`,
       };
-      localStorage.setItem('yourtebu_user', JSON.stringify(state.user));
+      state.user = mockUser;
+      localStorage.setItem('yourtebu_user', JSON.stringify(mockUser));
+      updateUserUI();
       authModal?.classList.add('hidden');
       window.location.reload();
-    } catch {
-      $('#btn-google-login')?.click();
     }
-  };
+  });
+}
+
+function handleGoogleCredentialResponse(response) {
+  const payload = parseJwt(response.credential);
+  if (payload) {
+    const user = {
+      name: payload.name || payload.given_name || 'Trường Nhật',
+      email: payload.email || '',
+      picture: payload.picture || '',
+    };
+    state.user = user;
+    localStorage.setItem('yourtebu_user', JSON.stringify(user));
+    updateUserUI();
+    $('#auth-modal')?.classList.add('hidden');
+    showToast(`${t('auth.welcome')}, ${user.name}!`);
+    window.location.reload();
+  }
 }
 
 function updateUserUI() {
   const signinBtn = $('#btn-signin');
   if (!signinBtn) return;
+
   if (state.user) {
+    const safeAvatarUrl =
+      state.user.picture && state.user.picture.startsWith('http')
+        ? state.user.picture.replace('http://', 'https://')
+        : '';
     signinBtn.innerHTML = `
-      <span class="material-icons-round" style="color:var(--text-link); font-size:20px; flex-shrink:0;">account_circle</span>
-      <span style="font-weight:600; font-size:13px; color:var(--text-primary); max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${state.user.name}</span>
+      <img src="${safeAvatarUrl}" class="user-avatar-img" alt="${state.user.name}" onerror="this.outerHTML='<span class=\\'material-icons-round\\' style=\\'color:var(--text-link); font-size:20px;\\'>account_circle</span>'" />
+      <span class="user-name-text">${state.user.name}</span>
     `;
-    signinBtn.title = t('auth.signOut');
+    signinBtn.title = `Đã đăng nhập: ${state.user.name} (${state.user.email})`;
   } else {
     signinBtn.innerHTML = `
       <span class="material-icons-round" style="color:var(--text-link); font-size:20px;">account_circle</span>
@@ -322,40 +333,35 @@ function updateUserUI() {
 function updateI18nUI() {
   $$('[data-i18n]').forEach((el) => {
     const key = el.dataset.i18n;
-    el.textContent = t(key);
+    if (key) el.textContent = t(key);
   });
 }
 
 // Player
 function initPlayer() {
-  $('#fp-collapse')?.addEventListener('click', () => $('#full-player')?.classList.add('hidden'));
+  $('#fp-collapse')?.addEventListener('click', () => {
+    $('#full-player')?.classList.add('hidden');
+    videoEl.pause();
+  });
+
   $('#fp-play-pause')?.addEventListener('click', togglePlay);
   $('#fp-play-btn')?.addEventListener('click', togglePlay);
 
-  $('#fp-rewind')?.addEventListener('click', () => {
-    videoEl.currentTime -= 10;
-  });
-  $('#fp-forward')?.addEventListener('click', () => {
-    videoEl.currentTime += 10;
-  });
-
-  $('#fp-pip')?.addEventListener('click', async () => {
-    if (document.pictureInPictureElement) await document.exitPictureInPicture();
-    else await videoEl.requestPictureInPicture();
-  });
-
-  $('#fp-fullscreen')?.addEventListener('click', () => {
-    const container = $('.full-player__video-container');
-    if (document.fullscreenElement) document.exitFullscreen();
-    else container?.requestFullscreen?.();
-  });
-
   videoEl.addEventListener('timeupdate', () => {
-    if (!videoEl.duration) return;
-    const pct = (videoEl.currentTime / videoEl.duration) * 100;
     const progress = $('#fp-progress');
-    if (progress) progress.value = pct;
-    $('#fp-time-current').textContent = formatDuration(videoEl.currentTime);
+    const current = $('#fp-time-current');
+    const total = $('#fp-time-total');
+    if (progress && videoEl.duration) {
+      progress.value = (videoEl.currentTime / videoEl.duration) * 100;
+      current.textContent = formatDuration(videoEl.currentTime);
+      total.textContent = formatDuration(videoEl.duration);
+    }
+  });
+
+  $('#fp-progress')?.addEventListener('input', (e) => {
+    if (videoEl.duration) {
+      videoEl.currentTime = (e.target.value / 100) * videoEl.duration;
+    }
   });
 }
 
@@ -428,7 +434,7 @@ async function openVideo(videoId) {
 }
 
 // Ensure array has at least minLength items filling the entire screen
-function ensureRichList(list, minLength = 16) {
+function ensureRichList(list, minLength = 20) {
   let result = Array.isArray(list) ? [...list] : [];
   if (result.length < minLength) {
     FALLBACK_VIDEOS.forEach((item) => {
@@ -440,7 +446,15 @@ function ensureRichList(list, minLength = 16) {
   return result;
 }
 
-// Views with rich full-screen video grid filling entire screen
+function registerLoadedVideoIds(videos) {
+  if (Array.isArray(videos)) {
+    videos.forEach((v) => {
+      if (v.videoId) state.loadedVideoIds.add(v.videoId);
+    });
+  }
+}
+
+// Views with rich full-screen video grid filling entire screen & Infinite Scroll
 async function renderHome() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
@@ -459,7 +473,7 @@ async function renderHome() {
   }
 
   try {
-    let rawVideos = await fetchTrending('VN');
+    let rawVideos = await fetchTrending('VN', 1, state.activeCategory);
     let videos = ensureRichList(rawVideos, 20);
 
     if (state.activeCategory !== 'all') {
@@ -475,10 +489,12 @@ async function renderHome() {
       videos = [...videos].reverse();
     }
 
+    registerLoadedVideoIds(videos);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   } catch {
     const displayList = state.user ? [...FALLBACK_VIDEOS].reverse() : FALLBACK_VIDEOS;
+    registerLoadedVideoIds(displayList);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   }
@@ -488,11 +504,13 @@ async function renderTrending() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
   try {
-    const rawVideos = await fetchTrending('VN');
-    const displayList = ensureRichList(rawVideos, 16);
+    const rawVideos = await fetchTrending('VN', 1, 'all');
+    const displayList = ensureRichList(rawVideos, 20);
+    registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   } catch {
+    registerLoadedVideoIds(FALLBACK_VIDEOS);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   }
@@ -502,11 +520,13 @@ async function renderMusic() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
   try {
-    const rawVideos = await fetchSearchResults('music');
-    const displayList = ensureRichList(rawVideos, 16);
+    const rawVideos = await fetchSearchResults('music', 'all', 1);
+    const displayList = ensureRichList(rawVideos, 20);
+    registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   } catch {
+    registerLoadedVideoIds(FALLBACK_VIDEOS);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   }
@@ -521,14 +541,89 @@ async function renderSearch(query) {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(12)}</div>`;
   try {
-    const results = await fetchSearchResults(query);
-    const displayList = ensureRichList(results, 12);
+    const results = await fetchSearchResults(query, 'all', 1);
+    const displayList = ensureRichList(results, 16);
+    registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   } catch {
     const displayList = getFallbackSearch(query);
+    registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+  }
+}
+
+// Infinite Scroll Engine
+function initInfiniteScroll() {
+  window.addEventListener('scroll', () => {
+    if (state.isLoadingMore || !state.hasMore || state.currentView === 'history') return;
+    if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 450) {
+      loadMoreVideos();
+    }
+  });
+}
+
+async function loadMoreVideos() {
+  const grid = $('.video-grid');
+  if (!grid || state.isLoadingMore) return;
+
+  state.isLoadingMore = true;
+  state.page += 1;
+
+  // Render Skeleton Loader indicator at bottom of grid
+  const loaderEl = document.createElement('div');
+  loaderEl.id = 'infinite-loader-box';
+  loaderEl.style.gridColumn = '1 / -1';
+  loaderEl.style.display = 'grid';
+  loaderEl.style.gap = '20px';
+  loaderEl.style.gridTemplateColumns = 'repeat(auto-fill, minmax(280px, 1fr))';
+  loaderEl.style.padding = '20px 0';
+  loaderEl.innerHTML = renderSkeletons(4);
+  grid.appendChild(loaderEl);
+
+  try {
+    let rawItems = [];
+    if (state.currentView === 'home' || state.currentView === 'trending') {
+      rawItems = await fetchTrending('VN', state.page, state.activeCategory);
+    } else if (state.currentView === 'music') {
+      rawItems = await fetchSearchResults('music', 'all', state.page);
+    } else if (state.currentView === 'search' && state.currentSearchQuery) {
+      rawItems = await fetchSearchResults(state.currentSearchQuery, 'all', state.page);
+    }
+
+    loaderEl.remove();
+
+    if (!Array.isArray(rawItems) || rawItems.length === 0) {
+      state.hasMore = false;
+      state.isLoadingMore = false;
+      return;
+    }
+
+    // Filter duplicates
+    const newVideos = rawItems.filter((v) => v.videoId && !state.loadedVideoIds.has(v.videoId));
+    if (newVideos.length === 0) {
+      state.hasMore = false;
+      state.isLoadingMore = false;
+      return;
+    }
+
+    registerLoadedVideoIds(newVideos);
+
+    const tempWrapper = document.createElement('div');
+    tempWrapper.innerHTML = newVideos.map((v, i) => renderCard(v, state.page * 10 + i)).join('');
+    const newCards = Array.from(tempWrapper.children);
+
+    newCards.forEach((card) => {
+      grid.appendChild(card);
+    });
+
+    attachCardEvents($('#view-container'));
+  } catch {
+    loaderEl.remove();
+    state.hasMore = false;
+  } finally {
+    state.isLoadingMore = false;
   }
 }
 
