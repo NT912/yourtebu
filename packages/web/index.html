@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f0f0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Yourtebu</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" />
+  <link rel="stylesheet" href="/src/styles/variables.css" />
+  <link rel="stylesheet" href="/src/styles/base.css" />
+  <link rel="stylesheet" href="/src/styles/components.css" />
+  <link rel="stylesheet" href="/src/styles/responsive.css" />
+  <!-- Google Identity Services (GIS) Official SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="app">
+    <!-- HEADER -->
+    <header id="app-header" class="header">
+      <div class="header__left">
+        <button id="btn-menu" class="icon-btn header__menu-btn" aria-label="Menu">
+          <span class="material-icons-round">menu</span>
+        </button>
+        <a href="#/" class="header__logo">
+          <svg class="header__logo-icon" viewBox="0 0 90 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="2" width="16" height="16" rx="3" fill="#FF0000"/>
+            <path d="M6.5 6.5L12 10L6.5 13.5V6.5Z" fill="white"/>
+            <text x="20" y="15" fill="var(--text-primary)" font-family="Roboto" font-weight="700" font-size="14">Yourtebu</text>
+          </svg>
+        </a>
+      </div>
+
+      <div class="header__center">
+        <div class="header__search-box">
+          <input type="text" id="search-input" class="header__search-input" placeholder="Tìm kiếm" autocomplete="off" />
+          <button id="btn-search" class="header__search-btn" aria-label="Search">
+            <span class="material-icons-round">search</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="header__right">
+        <button id="btn-sleep-timer" class="icon-btn" aria-label="Hẹn giờ tắt" title="Hẹn giờ tắt">
+          <span class="material-icons-round">bedtime</span>
+          <span id="timer-badge" class="timer-badge hidden"></span>
+        </button>
+        <button id="btn-theme-toggle" class="icon-btn" aria-label="Giao diện" title="Đổi giao diện">
+          <span class="material-icons-round">light_mode</span>
+        </button>
+        <button id="btn-lang-toggle" class="icon-btn" aria-label="Ngôn ngữ" title="Đổi ngôn ngữ">
+          <span class="material-icons-round">language</span>
+        </button>
+        <button id="btn-audio-mode" class="icon-btn" aria-label="Audio Only" title="Chỉ nghe nhạc">
+          <span class="material-icons-round">headphones</span>
+        </button>
+
+        <!-- SIGN IN / USER BUTTON (YOUTUBE STYLE) -->
+        <button id="btn-signin" class="signin-btn" aria-label="Đăng nhập">
+          <span class="material-icons-round" style="color:var(--text-link); font-size:20px;">account_circle</span>
+          <span data-i18n="auth.signIn">Sign in</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="sidebar">
+      <nav class="sidebar__nav">
+        <a href="#/" class="sidebar__item active" data-view="home">
+          <span class="material-icons-round">home</span>
+          <span class="sidebar__label" data-i18n="nav.home">Trang chủ</span>
+        </a>
+        <a href="#/trending" class="sidebar__item" data-view="trending">
+          <span class="material-icons-round">explore</span>
+          <span class="sidebar__label" data-i18n="nav.explore">Khám phá</span>
+        </a>
+        <a href="#/music" class="sidebar__item" data-view="music">
+          <span class="material-icons-round">music_note</span>
+          <span class="sidebar__label" data-i18n="nav.music">Nhạc</span>
+        </a>
+        <a href="#/history" class="sidebar__item" data-view="history">
+          <span class="material-icons-round">history</span>
+          <span class="sidebar__label" data-i18n="nav.history">Lịch sử</span>
+        </a>
+      </nav>
+    </aside>
+
+    <!-- BOTTOM NAV (Mobile) -->
+    <nav id="bottom-nav" class="bottom-nav">
+      <a href="#/" class="bottom-nav__item active" data-view="home">
+        <span class="material-icons-round">home</span>
+        <span class="bottom-nav__label" data-i18n="nav.home">Trang chủ</span>
+      </a>
+      <a href="#/trending" class="bottom-nav__item" data-view="trending">
+        <span class="material-icons-round">explore</span>
+        <span class="bottom-nav__label" data-i18n="nav.explore">Khám phá</span>
+      </a>
+      <a href="#/music" class="bottom-nav__item" data-view="music">
+        <span class="material-icons-round">music_note</span>
+        <span class="bottom-nav__label" data-i18n="nav.music">Nhạc</span>
+      </a>
+      <a href="#/history" class="bottom-nav__item" data-view="history">
+        <span class="material-icons-round">history</span>
+        <span class="bottom-nav__label" data-i18n="nav.history">Lịch sử</span>
+      </a>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <main id="main-content" class="main-content">
+      <!-- CATEGORY CHIPS BAR -->
+      <div id="chips-bar" class="chips-bar">
+        <button class="chip active" data-category="all">Tất cả</button>
+        <button class="chip" data-category="music">Âm nhạc</button>
+        <button class="chip" data-category="live">Trực tiếp</button>
+        <button class="chip" data-category="gaming">Trò chơi</button>
+        <button class="chip" data-category="news">Tin tức</button>
+        <button class="chip" data-category="vietnam">Việt Nam</button>
+        <button class="chip" data-category="recommended">Được đề xuất</button>
+      </div>
+
+      <div id="view-container" class="view-container"></div>
+    </main>
+
+    <!-- FULL PLAYER -->
+    <div id="full-player" class="full-player hidden">
+      <div class="full-player__header">
+        <button id="fp-collapse" class="icon-btn"><span class="material-icons-round">keyboard_arrow_down</span></button>
+        <span id="fp-header-title" class="full-player__header-title">Đang phát</span>
+        <div></div>
+      </div>
+      <div class="full-player__video-container">
+        <video id="video-element" class="full-player__video" playsinline webkit-playsinline></video>
+        <div id="video-overlay" class="video-overlay">
+          <div class="video-overlay__center">
+            <button id="fp-rewind" class="icon-btn icon-btn--lg"><span class="material-icons-round">replay_10</span></button>
+            <button id="fp-play-pause" class="icon-btn icon-btn--xl"><span class="material-icons-round">play_arrow</span></button>
+            <button id="fp-forward" class="icon-btn icon-btn--lg"><span class="material-icons-round">forward_10</span></button>
+          </div>
+          <div class="video-overlay__bottom">
+            <div class="progress-bar-container">
+              <span id="fp-time-current" class="time-label">0:00</span>
+              <input type="range" id="fp-progress" class="progress-bar" min="0" max="100" value="0" step="0.1" />
+              <span id="fp-time-total" class="time-label">0:00</span>
+            </div>
+            <div class="player-controls-row">
+              <div class="player-controls-left">
+                <button id="fp-prev" class="icon-btn"><span class="material-icons-round">skip_previous</span></button>
+                <button id="fp-play-btn" class="icon-btn"><span class="material-icons-round">play_arrow</span></button>
+                <button id="fp-next-btn" class="icon-btn"><span class="material-icons-round">skip_next</span></button>
+              </div>
+              <div class="player-controls-right">
+                <button id="fp-autoplay" class="icon-btn toggle-btn active"><span class="material-icons-round">playlist_play</span></button>
+                <button id="fp-loop" class="icon-btn toggle-btn"><span class="material-icons-round">repeat</span></button>
+                <button id="fp-pip" class="icon-btn"><span class="material-icons-round">picture_in_picture_alt</span></button>
+                <button id="fp-fullscreen" class="icon-btn"><span class="material-icons-round">fullscreen</span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- READ-ONLY VIDEO DETAILS + YOUTUBE ACTION LINK -->
+      <div class="full-player__details">
+        <h1 id="fp-video-title" class="video-info__title"></h1>
+        <div class="video-info__meta">
+          <span id="fp-views"></span> • <span id="fp-date"></span>
+        </div>
+        <div style="margin: 16px 0;">
+          <a id="fp-yt-link" href="#" target="_blank" rel="noopener noreferrer" class="yt-open-btn">
+            <span class="material-icons-round">open_in_new</span>
+            <span data-i18n="player.openOnYoutube">Mở trên YouTube</span>
+          </a>
+        </div>
+        <div id="fp-live-chat-container" class="hidden"></div>
+      </div>
+    </div>
+
+    <!-- SLEEP TIMER MODAL -->
+    <div id="sleep-timer-modal" class="modal hidden">
+      <div class="modal__backdrop"></div>
+      <div class="modal__sheet">
+        <div class="modal__header">
+          <span class="material-icons-round modal__header-icon">bedtime</span>
+          <h2 class="modal__title" data-i18n="timer.title">Hẹn giờ tắt</h2>
+          <button id="sleep-timer-close" class="icon-btn"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal__content">
+          <div class="timer-tabs">
+            <button class="timer-tab active" data-tab="minutes" data-i18n="timer.afterMinutes">Sau ... phút</button>
+            <button class="timer-tab" data-tab="hours" data-i18n="timer.afterHours">Sau ... giờ</button>
+            <button class="timer-tab" data-tab="clock" data-i18n="timer.atTime">Đến lúc ...</button>
+          </div>
+
+          <div id="timer-minutes-content" class="timer-content active">
+            <div class="timer-minutes-input">
+              <button id="timer-min-decrease" class="timer-adjust-btn"><span class="material-icons-round">remove</span></button>
+              <div class="timer-minutes-display">
+                <input type="number" id="timer-minutes-value" class="timer-minutes-number" value="30" min="5" max="240" />
+                <span class="timer-minutes-unit" data-i18n="timer.minuteUnit">phút</span>
+              </div>
+              <button id="timer-min-increase" class="timer-adjust-btn"><span class="material-icons-round">add</span></button>
+            </div>
+            <input type="range" id="timer-minutes-slider" class="timer-slider" min="5" max="240" value="30" step="1" />
+            <p style="font-size:12px; color:var(--text-disabled); text-align:center; margin-top:8px;" data-i18n="timer.minWarning">Tối thiểu 5 phút</p>
+          </div>
+
+          <div id="timer-hours-content" class="timer-content">
+            <div class="timer-minutes-input">
+              <input type="number" id="timer-hours-value" class="timer-minutes-number" value="1" min="1" max="24" />
+              <span class="timer-minutes-unit" data-i18n="timer.hourUnit">giờ</span>
+            </div>
+          </div>
+
+          <div id="timer-clock-content" class="timer-content">
+            <div class="timer-clock-input">
+              <div class="timer-clock-display">
+                <input type="number" id="timer-clock-hour" class="timer-clock-number" value="23" min="0" max="23" />
+                <span class="timer-clock-separator">:</span>
+                <input type="number" id="timer-clock-minute" class="timer-clock-number" value="0" min="0" max="59" />
+              </div>
+              <p id="timer-clock-info" class="timer-clock-info"></p>
+            </div>
+          </div>
+
+          <div class="timer-option">
+            <span data-i18n="timer.fadeOut">Giảm dần âm lượng (Fade out 30s)</span>
+            <label class="switch" for="timer-fadeout">
+              <input type="checkbox" id="timer-fadeout" checked />
+              <span class="switch__slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal__footer">
+          <button id="timer-cancel" class="modal-btn modal-btn--secondary" data-i18n="timer.cancel">Hủy hẹn giờ</button>
+          <button id="timer-start" class="modal-btn modal-btn--primary" data-i18n="timer.start">Bắt đầu hẹn giờ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CLEAN GOOGLE AUTH MODAL WITH REAL GOOGLE OAUTH CLIENT ID -->
+    <div id="auth-modal" class="modal hidden">
+      <div class="modal__backdrop"></div>
+      <div class="modal__sheet modal__sheet--small">
+        <div class="modal__header">
+          <span class="material-icons-round modal__header-icon" style="color:var(--text-link);">account_circle</span>
+          <h2 class="modal__title" data-i18n="auth.signIn">Đăng nhập</h2>
+          <button id="auth-close" class="icon-btn"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal__content" style="text-align:center;">
+          <p style="margin-bottom:20px; color:var(--text-secondary); font-size:14px;" data-i18n="auth.demoNotice">Đồng bộ kênh đăng ký và nội dung đề xuất cá nhân hóa</p>
+
+          <!-- OFFICIAL GOOGLE IDENTITY GIS BUTTON CONTAINER -->
+          <div id="g_id_gis_container" style="display:flex; justify-content:center; margin-bottom:16px;"></div>
+
+          <!-- FALLBACK GOOGLE BUTTON -->
+          <button id="btn-google-login" class="modal-btn modal-btn--primary" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:12px; font-weight:500;">
+            <svg width="20" height="20" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.1.83-.64 2.08-1.84 2.92l2.84 2.2c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.84-2.2c-.76.53-1.78.9-3.12.9-2.38 0-4.41-1.57-5.13-3.74L.97 13.04C2.45 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.87 10.78c-.18-.53-.28-1.1-.28-1.78s.1-1.25.28-1.78L.97 4.96C.35 6.18 0 7.55 0 9s.35 2.82.97 4.04l2.9-2.26z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.34l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.45 2.02.97 4.96l2.9 2.26C4.59 5.05 6.62 3.58 9 3.58z"/></svg>
+            <span data-i18n="auth.googleSignIn">Đăng nhập bằng Google</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

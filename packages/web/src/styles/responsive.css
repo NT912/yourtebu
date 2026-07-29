@@ -1,0 +1,37 @@
+/* Responsive Layout Rules */
+@media (max-width: 767px) {
+  .sidebar {
+    display: none;
+  }
+  .bottom-nav {
+    display: flex;
+  }
+  .main-content {
+    margin-left: 0;
+    padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .bottom-nav {
+    display: none;
+  }
+  .sidebar {
+    width: var(--sidebar-collapsed-width);
+  }
+  .main-content {
+    margin-left: var(--sidebar-collapsed-width);
+  }
+}
+
+@media (min-width: 1024px) {
+  .bottom-nav {
+    display: none;
+  }
+  .sidebar {
+    width: var(--sidebar-width);
+  }
+  .main-content {
+    margin-left: var(--sidebar-width);
+  }
+}

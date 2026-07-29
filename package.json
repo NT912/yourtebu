@@ -1,0 +1,34 @@
+{
+  "name": "yourtebu",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Yourtebu - Ad-free YouTube PWA with background play & sleep timer",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "prettier --write \"packages/**/*.{js,css,json,md}\"",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0",
+    "prettier": "^3.5.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.0",
+    "turbo": "^2.5.4"
+  },
+  "lint-staged": {
+    "*.{js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{css,json,md}": [
+      "prettier --write"
+    ]
+  },
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
