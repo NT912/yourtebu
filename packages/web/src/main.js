@@ -214,18 +214,8 @@ function initChipsBar() {
     userChip.textContent = userChipText;
   }
 
-  // Refresh Feed Button Listener
-  $('#btn-refresh-feed')?.addEventListener('click', () => {
-    resetPaginationState();
-    renderHome();
-    showToast(
-      getLang() === 'vi' ? 'Đang làm mới danh sách đề xuất...' : 'Refreshing recommendations...',
-    );
-  });
-
   const chips = $$('.chip');
   chips.forEach((chip) => {
-    if (chip.id === 'btn-refresh-feed') return;
     chip.addEventListener('click', () => {
       chips.forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
