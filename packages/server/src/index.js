@@ -22,10 +22,8 @@ app.use(
 // Health check
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: Date.now() }));
 
-// Routes with caching
+// Routes with caching (Real-time routes for search & trending are kept uncached for dynamic recommendations)
 app.use('/api/streams/*', cache(300_000)); // 5 min
-app.use('/api/search/*', cache(120_000)); // 2 min
-app.use('/api/trending/*', cache(600_000)); // 10 min
 app.use('/api/suggestions/*', cache(300_000));
 app.use('/api/live-chat/*', cache(3_000)); // 3 seconds for live data
 

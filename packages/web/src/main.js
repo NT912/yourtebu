@@ -209,13 +209,23 @@ function initChipsBar() {
       userChip = document.createElement('button');
       userChip.className = 'chip chip-user';
       userChip.dataset.category = 'recommended';
-      chipsBar.insertBefore(userChip, chipsBar.children[1]);
+      chipsBar.insertBefore(userChip, chipsBar.children[2] || chipsBar.children[1]);
     }
     userChip.textContent = userChipText;
   }
 
+  // Refresh Feed Button Listener
+  $('#btn-refresh-feed')?.addEventListener('click', () => {
+    resetPaginationState();
+    renderHome();
+    showToast(
+      getLang() === 'vi' ? 'Đang làm mới danh sách đề xuất...' : 'Refreshing recommendations...',
+    );
+  });
+
   const chips = $$('.chip');
   chips.forEach((chip) => {
+    if (chip.id === 'btn-refresh-feed') return;
     chip.addEventListener('click', () => {
       chips.forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
@@ -454,6 +464,31 @@ function registerLoadedVideoIds(videos) {
   }
 }
 
+function appendLoadMoreButton(container) {
+  const existingBtn = $('#btn-load-more-container');
+  if (existingBtn) existingBtn.remove();
+
+  const loadMoreContainer = document.createElement('div');
+  loadMoreContainer.id = 'btn-load-more-container';
+  loadMoreContainer.style.gridColumn = '1 / -1';
+  loadMoreContainer.style.textAlign = 'center';
+  loadMoreContainer.style.padding = '30px 0 10px';
+
+  loadMoreContainer.innerHTML = `
+    <button id="btn-manual-load-more" style="padding:10px 24px; background:var(--bg-tertiary); color:var(--text-link); border:1px solid var(--border-color); border-radius:var(--radius-full); font-weight:600; cursor:pointer; font-size:14px; transition:all 0.2s ease;">
+      👇 ${getLang() === 'vi' ? 'Tải thêm video đề xuất...' : 'Load more recommendations...'}
+    </button>
+  `;
+
+  const grid = container.querySelector('.video-grid');
+  if (grid) {
+    grid.appendChild(loadMoreContainer);
+    $('#btn-manual-load-more')?.addEventListener('click', () => {
+      loadMoreVideos();
+    });
+  }
+}
+
 // Views with rich full-screen video grid filling entire screen & Infinite Scroll
 async function renderHome() {
   const container = $('#view-container');
@@ -476,15 +511,6 @@ async function renderHome() {
     let rawVideos = await fetchTrending('VN', 1, state.activeCategory);
     let videos = ensureRichList(rawVideos, 20);
 
-    if (state.activeCategory !== 'all') {
-      videos = videos.filter(
-        (v) =>
-          (v.category && v.category.toLowerCase().includes(state.activeCategory)) ||
-          state.activeCategory === 'all',
-      );
-      if (videos.length === 0) videos = FALLBACK_VIDEOS;
-    }
-
     if (state.user) {
       videos = [...videos].reverse();
     }
@@ -492,11 +518,13 @@ async function renderHome() {
     registerLoadedVideoIds(videos);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   } catch {
     const displayList = state.user ? [...FALLBACK_VIDEOS].reverse() : FALLBACK_VIDEOS;
     registerLoadedVideoIds(displayList);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   }
 }
 
@@ -509,10 +537,12 @@ async function renderTrending() {
     registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   } catch {
     registerLoadedVideoIds(FALLBACK_VIDEOS);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   }
 }
 
@@ -525,10 +555,12 @@ async function renderMusic() {
     registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   } catch {
     registerLoadedVideoIds(FALLBACK_VIDEOS);
     container.innerHTML = `<h2 style="margin-bottom:16px;">🎵 ${t('music.title')}</h2><div class="video-grid">${FALLBACK_VIDEOS.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   }
 }
 
@@ -546,11 +578,13 @@ async function renderSearch(query) {
     registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   } catch {
     const displayList = getFallbackSearch(query);
     registerLoadedVideoIds(displayList);
     container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${displayList.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+    appendLoadMoreButton(container);
   }
 }
 
@@ -558,7 +592,11 @@ async function renderSearch(query) {
 function initInfiniteScroll() {
   window.addEventListener('scroll', () => {
     if (state.isLoadingMore || !state.hasMore || state.currentView === 'history') return;
-    if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 450) {
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
+    const clientHeight = window.innerHeight || document.documentElement.clientHeight;
+
+    if (scrollTop + clientHeight >= scrollHeight - 600) {
       loadMoreVideos();
     }
   });
@@ -570,6 +608,10 @@ async function loadMoreVideos() {
 
   state.isLoadingMore = true;
   state.page += 1;
+
+  // Remove manual button if present
+  const manualBtnBox = $('#btn-load-more-container');
+  if (manualBtnBox) manualBtnBox.remove();
 
   // Render Skeleton Loader indicator at bottom of grid
   const loaderEl = document.createElement('div');
@@ -603,7 +645,22 @@ async function loadMoreVideos() {
     // Filter duplicates
     const newVideos = rawItems.filter((v) => v.videoId && !state.loadedVideoIds.has(v.videoId));
     if (newVideos.length === 0) {
-      state.hasMore = false;
+      // If page had duplicate candidates, fallback to adding items with fresh index
+      const remainingItems = rawItems.filter((v) => v.videoId).slice(0, 10);
+      remainingItems.forEach((v) => {
+        state.loadedVideoIds.add(v.videoId + '_' + state.page);
+      });
+      if (remainingItems.length > 0) {
+        const tempWrapper = document.createElement('div');
+        tempWrapper.innerHTML = remainingItems
+          .map((v, i) => renderCard(v, state.page * 10 + i))
+          .join('');
+        Array.from(tempWrapper.children).forEach((card) => grid.appendChild(card));
+        attachCardEvents($('#view-container'));
+        appendLoadMoreButton($('#view-container'));
+      } else {
+        state.hasMore = false;
+      }
       state.isLoadingMore = false;
       return;
     }
@@ -619,6 +676,7 @@ async function loadMoreVideos() {
     });
 
     attachCardEvents($('#view-container'));
+    appendLoadMoreButton($('#view-container'));
   } catch {
     loaderEl.remove();
     state.hasMore = false;
