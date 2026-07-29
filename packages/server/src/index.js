@@ -7,6 +7,7 @@ import searchRoute from './routes/search.js';
 import trendingRoute from './routes/trending.js';
 import suggestionsRoute from './routes/suggestions.js';
 import liveChatRoute from './routes/live-chat.js';
+import recommendationsRoute from './routes/recommendations.js';
 
 const app = new Hono();
 
@@ -32,6 +33,7 @@ app.route('/api/search', searchRoute);
 app.route('/api/trending', trendingRoute);
 app.route('/api/suggestions', suggestionsRoute);
 app.route('/api/live-chat', liveChatRoute);
+app.route('/api/recommendations', recommendationsRoute);
 
 // Thumbnail proxy — fetches YouTube CDN images server-side to bypass CORS/referrer blocks
 app.get('/api/thumbnail/:videoId', async (c) => {

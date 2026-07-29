@@ -50,3 +50,103 @@ export async function fetchLiveChat(videoId) {
     return null;
   }
 }
+
+// ============ PERSONALIZED RECOMMENDATIONS ============
+
+/**
+ * Fetch videos from user's subscribed channels.
+ * @param {string} accessToken - Google OAuth2 access token with YouTube scope
+ * @returns {Promise<Array>}
+ */
+export async function fetchSubscriptionVideos(accessToken) {
+  if (!accessToken) return [];
+  try {
+    const res = await fetch('/api/recommendations/subscriptions', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch user's liked videos.
+ * @param {string} accessToken - Google OAuth2 access token with YouTube scope
+ * @returns {Promise<Array>}
+ */
+export async function fetchLikedVideos(accessToken) {
+  if (!accessToken) return [];
+  try {
+    const res = await fetch('/api/recommendations/liked', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch videos related to given video IDs (from watch history).
+ * @param {string[]} videoIds
+ * @param {string|null} accessToken
+ * @returns {Promise<Array>}
+ */
+export async function fetchRelatedVideos(videoIds, accessToken = null) {
+  if (!videoIds || videoIds.length === 0) return [];
+  try {
+    const headers = {};
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const res = await fetch(`/api/recommendations/related?videoIds=${videoIds.join(',')}`, {
+      headers,
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch personalized feed combining all 3 sources.
+ * Runs all 3 fetches in parallel, merges, shuffles, and returns.
+ * @param {string} accessToken
+ * @param {string[]} recentVideoIds - From local watch history
+ * @returns {Promise<Array>}
+ */
+export async function fetchPersonalizedFeed(accessToken, recentVideoIds = []) {
+  const [subscriptionVids, likedVids, relatedVids] = await Promise.all([
+    fetchSubscriptionVideos(accessToken),
+    fetchLikedVideos(accessToken),
+    fetchRelatedVideos(recentVideoIds, accessToken),
+  ]);
+
+  // Combine with source badges
+  const all = [
+    ...subscriptionVids.map((v) => ({ ...v, source: 'subscription' })),
+    ...likedVids.map((v) => ({ ...v, source: 'liked' })),
+    ...relatedVids.map((v) => ({ ...v, source: 'related' })),
+  ];
+
+  // Deduplicate by videoId
+  const seen = new Set();
+  const deduped = all.filter((v) => {
+    if (!v.videoId || seen.has(v.videoId)) return false;
+    seen.add(v.videoId);
+    return true;
+  });
+
+  // Shuffle
+  for (let i = deduped.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deduped[i], deduped[j]] = [deduped[j], deduped[i]];
+  }
+
+  return deduped;
+}

@@ -7,12 +7,17 @@ import {
   formatViews,
   YOUTUBE_WATCH_BASE,
   FALLBACK_VIDEOS,
-  getFallbackSearch,
   GOOGLE_CLIENT_ID,
   parseJwt,
 } from '@yourtebu/shared';
 import { initTheme, setTheme, getTheme } from './services/theme.js';
-import { fetchVideoInfo, fetchSearchResults, fetchTrending } from './services/api.js';
+import {
+  fetchVideoInfo,
+  fetchSearchResults,
+  fetchTrending,
+  fetchPersonalizedFeed,
+} from './services/api.js';
+import { addToWatchHistory, getRecentVideoIds } from './services/watch-history.js';
 import { sleepTimer } from './services/sleep-timer.js';
 import { setupSleepTimerModal } from './components/sleep-timer-modal.js';
 import { LiveChatComponent } from './components/live-chat.js';
@@ -33,6 +38,7 @@ const state = {
   isAudioOnly: false,
   activeCategory: 'all',
   user: initialUser,
+  accessToken: localStorage.getItem('yourtebu_access_token') || null,
   history: JSON.parse(localStorage.getItem('yourtebu_history') || '[]'),
   page: 1,
   isLoadingMore: false,
@@ -226,44 +232,43 @@ function initChipsBar() {
   });
 }
 
+let tokenClient = null;
+
 function initAuth() {
   const signinBtn = $('#btn-signin');
   const authModal = $('#auth-modal');
 
   updateUserUI();
 
-  // Initialize Real Google Identity Services (GIS) with user's official OAuth Client ID
-  const initGIS = () => {
-    const gisContainer = $('#g_id_gis_container');
-    if (window.google?.accounts?.id && gisContainer) {
-      gisContainer.innerHTML = '';
-      window.google.accounts.id.initialize({
+  // Initialize OAuth2 Token Client for full YouTube scope (subscriptions, liked videos, related)
+  const initOAuthTokenClient = () => {
+    if (window.google?.accounts?.oauth2) {
+      tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-      });
-      window.google.accounts.id.renderButton(gisContainer, {
-        theme: 'filled_blue',
-        size: 'large',
-        text: 'signin_with',
-        shape: 'pill',
+        scope: 'https://www.googleapis.com/auth/youtube.readonly profile email',
+        callback: handleGoogleTokenResponse,
       });
     }
   };
 
-  setTimeout(initGIS, 800);
+  setTimeout(initOAuthTokenClient, 800);
 
   signinBtn?.addEventListener('click', () => {
     if (state.user) {
       if (confirm(t('auth.signOutConfirm') || 'Bạn có muốn đăng xuất không?')) {
         state.user = null;
+        state.accessToken = null;
         localStorage.removeItem('yourtebu_user');
+        localStorage.removeItem('yourtebu_access_token');
         updateUserUI();
         window.location.reload();
       }
     } else {
-      authModal?.classList.remove('hidden');
-      initGIS();
+      if (tokenClient) {
+        tokenClient.requestAccessToken();
+      } else {
+        authModal?.classList.remove('hidden');
+      }
     }
   });
 
@@ -272,10 +277,11 @@ function initAuth() {
   });
 
   $('#btn-google-login')?.addEventListener('click', () => {
-    initGIS();
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.prompt();
+    if (!tokenClient) initOAuthTokenClient();
+    if (tokenClient) {
+      tokenClient.requestAccessToken();
     } else {
+      // Demo mock fallback if Google client library fails to load
       const mockUser = {
         name: 'Trường Nhật',
         email: 'user@gmail.com',
@@ -285,26 +291,49 @@ function initAuth() {
       localStorage.setItem('yourtebu_user', JSON.stringify(mockUser));
       updateUserUI();
       authModal?.classList.add('hidden');
-      window.location.reload();
+      renderHome();
     }
   });
 }
 
-function handleGoogleCredentialResponse(response) {
-  const payload = parseJwt(response.credential);
-  if (payload) {
-    const user = {
-      name: payload.name || payload.given_name || 'Trường Nhật',
-      email: payload.email || '',
-      picture: payload.picture || '',
-    };
-    state.user = user;
-    localStorage.setItem('yourtebu_user', JSON.stringify(user));
-    updateUserUI();
-    $('#auth-modal')?.classList.add('hidden');
-    showToast(`${t('auth.welcome')}, ${user.name}!`);
-    window.location.reload();
+async function handleGoogleTokenResponse(response) {
+  if (response.error) {
+    showToast('Đăng nhập thất bại: ' + response.error);
+    return;
   }
+
+  const accessToken = response.access_token;
+  state.accessToken = accessToken;
+  localStorage.setItem('yourtebu_access_token', accessToken);
+
+  // Fetch Google User Profile info with access_token
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.ok) {
+      const profile = await res.json();
+      const user = {
+        name: profile.name || profile.given_name || 'Trường Nhật',
+        email: profile.email || '',
+        picture: profile.picture || '',
+      };
+      state.user = user;
+      localStorage.setItem('yourtebu_user', JSON.stringify(user));
+    }
+  } catch {
+    state.user = {
+      name: 'Trường Nhật',
+      email: 'user@gmail.com',
+      picture: `https://api.dicebear.com/7.x/avataaars/svg?seed=TruongNhat`,
+    };
+    localStorage.setItem('yourtebu_user', JSON.stringify(state.user));
+  }
+
+  updateUserUI();
+  $('#auth-modal')?.classList.add('hidden');
+  showToast(`${t('auth.welcome')}, ${state.user.name}! Đã kết nối đề xuất YouTube cá nhân hóa.`);
+  renderHome();
 }
 
 function updateUserUI() {
@@ -382,6 +411,9 @@ async function openVideo(videoId) {
     }
     state.currentVideoInfo = info;
 
+    // Track local watch history for personalized related recommendations
+    addToWatchHistory(info);
+
     $('#fp-video-title').textContent = info.title;
     $('#fp-views').textContent = formatViews(info.views, getLang());
     $('#fp-date').textContent = info.uploadDate || '2026';
@@ -441,7 +473,7 @@ function registerLoadedVideoIds(videos) {
   }
 }
 
-// Views - Server handles shuffling & pagination, frontend just renders
+// Views - Smart 3-Source Personalized Feed (Subscriptions + Liked + Watch History Related)
 async function renderHome() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
@@ -449,21 +481,47 @@ async function renderHome() {
   let personalizedBadge = '';
   if (state.user) {
     personalizedBadge = `
-      <div style="margin-bottom:20px; padding:14px 20px; background:var(--bg-tertiary); border-radius:var(--radius-lg); border-left:4px solid var(--text-link); display:flex; align-items:center; gap:12px;">
-        <span class="material-icons-round" style="color:var(--text-link); font-size:28px;">account_circle</span>
-        <div>
-          <span style="font-weight:600; font-size:15px; color:var(--text-primary);">Đề xuất cá nhân hóa cho ${state.user.name}</span>
-          <p style="font-size:13px; color:var(--text-secondary); margin:2px 0 0;">Nội dung video được tối ưu theo tài khoản YouTube của bạn</p>
+      <div style="margin-bottom:20px; padding:14px 20px; background:var(--bg-tertiary); border-radius:var(--radius-lg); border-left:4px solid var(--text-link); display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span class="material-icons-round" style="color:var(--text-link); font-size:28px;">account_circle</span>
+          <div>
+            <span style="font-weight:600; font-size:15px; color:var(--text-primary);">Đề xuất cá nhân hóa cho ${state.user.name}</span>
+            <p style="font-size:13px; color:var(--text-secondary); margin:2px 0 0;">Tổng hợp từ 📺 Kênh đăng ký • ❤️ Video đã thích • 🔄 Lịch sử đã xem</p>
+          </div>
         </div>
+        ${
+          !state.accessToken
+            ? `<button id="btn-reconnect-youtube" style="padding:6px 14px; background:var(--text-link); color:white; border:none; border-radius:var(--radius-md); font-weight:600; font-size:12px; cursor:pointer;">Cấp quyền YouTube</button>`
+            : ''
+        }
       </div>
     `;
   }
 
   try {
-    const videos = await fetchTrending('VN', 1, state.activeCategory);
+    let videos = [];
+    // 1. Try 3-source personalized feed if logged in and access_token exists
+    if (state.user && state.accessToken && state.activeCategory === 'all') {
+      const recentWatchedIds = getRecentVideoIds(5);
+      const personalized = await fetchPersonalizedFeed(state.accessToken, recentWatchedIds);
+      if (Array.isArray(personalized) && personalized.length > 0) {
+        videos = personalized;
+      }
+    }
+
+    // 2. Fallback to dynamic trending feed
+    if (videos.length === 0) {
+      videos = await fetchTrending('VN', 1, state.activeCategory);
+    }
+
     registerLoadedVideoIds(videos);
     container.innerHTML = `${personalizedBadge}<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
+
+    // Re-connect YouTube button listener
+    $('#btn-reconnect-youtube')?.addEventListener('click', () => {
+      if (tokenClient) tokenClient.requestAccessToken();
+    });
   } catch {
     container.innerHTML = `${personalizedBadge}<div class="video-grid"><p style="color:var(--text-secondary); grid-column:1/-1;">Không thể tải video. Hãy thử lại sau.</p></div>`;
   }
@@ -599,9 +657,20 @@ function renderCard(v, idx = 0) {
   const wsrvFallback = `https://wsrv.nl/?url=https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   const directFallback = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
 
+  // Source Badge for Personalized Recommendations
+  let sourceBadge = '';
+  if (v.source === 'subscription') {
+    sourceBadge = `<span style="position:absolute; top:6px; left:6px; background:rgba(234,67,53,0.9); color:white; padding:3px 8px; font-size:11px; font-weight:600; border-radius:4px; z-index:2; backdrop-filter:blur(4px);">📺 Kênh đăng ký</span>`;
+  } else if (v.source === 'liked') {
+    sourceBadge = `<span style="position:absolute; top:6px; left:6px; background:rgba(235,50,35,0.9); color:white; padding:3px 8px; font-size:11px; font-weight:600; border-radius:4px; z-index:2; backdrop-filter:blur(4px);">❤️ Bạn đã thích</span>`;
+  } else if (v.source === 'related') {
+    sourceBadge = `<span style="position:absolute; top:6px; left:6px; background:rgba(24,119,242,0.9); color:white; padding:3px 8px; font-size:11px; font-weight:600; border-radius:4px; z-index:2; backdrop-filter:blur(4px);">🔄 Liên quan</span>`;
+  }
+
   return `
     <div class="video-card" data-video-id="${videoId}">
       <div class="video-card__thumbnail-box" style="background:${gradient};">
+        ${sourceBadge}
         <img src="${thumbUrl}" class="video-card__img" loading="lazy" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='${wsrvFallback}';}else if(this.dataset.retry==='1'){this.dataset.retry='2';this.src='${directFallback}';}else{this.style.display='none';}" />
         <span class="material-icons-round" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:44px; color:rgba(255,255,255,0.95); pointer-events:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));">play_circle_filled</span>
         <span style="position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; font-size:11px; font-weight:500; border-radius:4px; z-index:2;">${duration}</span>
