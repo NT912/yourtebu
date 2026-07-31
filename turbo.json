@@ -1,5 +1,11 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "YOUTUBE_API_KEY",
+    "GOOGLE_CLIENT_ID",
+    "VITE_YOUTUBE_API_KEY",
+    "VITE_GOOGLE_CLIENT_ID"
+  ],
   "tasks": {
     "dev": {
       "dependsOn": ["^dev"],
@@ -8,6 +14,7 @@
     },
     "build": {
       "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**"]
     },
     "lint": {
@@ -15,3 +22,4 @@
     }
   }
 }
+
