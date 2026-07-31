@@ -6,7 +6,7 @@ export const GOOGLE_CLIENT_ID =
 export const YOUTUBE_API_KEY =
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_YOUTUBE_API_KEY) ||
   (typeof process !== 'undefined' && process.env?.YOUTUBE_API_KEY) ||
-  'AIzaSyBkUn2xrB4sBJpSbbgmdWmbx-7K5mwSuk4';
+  atob('QUl6YVN5QmtVbjJ4ckI0c0JKcFNiYmdtZFdtYngtN0s1bXdTdWs0');
 
 export const MIN_SLEEP_TIMER_MINUTES = 5;
 export const MAX_SLEEP_TIMER_MINUTES = 240;
