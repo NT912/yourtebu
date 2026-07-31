@@ -336,7 +336,11 @@ function initHeader() {
 
   // Timer modal trigger
   $('#btn-sleep-timer')?.addEventListener('click', () => {
-    $('#sleep-timer-modal')?.classList.remove('hidden');
+    const modal = $('#sleep-timer-modal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      setupSleepTimerModal(modal, showToast, updateTimerBadge);
+    }
   });
 }
 
@@ -1002,19 +1006,22 @@ function attachCardEvents(container) {
   });
 }
 
+function updateTimerBadge(ms) {
+  const badge = $('#timer-badge');
+  if (!badge) return;
+  if (!ms || ms <= 0 || isNaN(ms)) {
+    badge.classList.add('hidden');
+  } else {
+    badge.classList.remove('hidden');
+    const mins = Math.ceil(ms / 60000);
+    badge.textContent = `${mins}m`;
+  }
+}
+
 function initModals() {
   const timerModal = $('#sleep-timer-modal');
   if (timerModal) {
-    setupSleepTimerModal(timerModal, showToast, (ms) => {
-      const badge = $('#timer-badge');
-      if (!badge) return;
-      if (ms <= 0) {
-        badge.classList.add('hidden');
-      } else {
-        badge.classList.remove('hidden');
-        badge.textContent = Math.ceil(ms / 60000);
-      }
-    });
+    setupSleepTimerModal(timerModal, showToast, updateTimerBadge);
   }
 }
 

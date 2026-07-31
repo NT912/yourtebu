@@ -9,38 +9,64 @@ export function setupSleepTimerModal(modalEl, showToastCb, badgeCb) {
   const stopBtn = modalEl.querySelector('#sleep-timer-stop-btn');
   const customBtn = modalEl.querySelector('#yt-timer-custom-btn');
   const customDrawer = modalEl.querySelector('#yt-timer-custom-drawer');
+  const backdropEl = modalEl.querySelector('.modal__backdrop');
+  const closeBtn = modalEl.querySelector('#sleep-timer-close');
+
+  const closeModal = () => modalEl.classList.add('hidden');
+
+  // Backdrop & Close Click Listeners
+  if (backdropEl) backdropEl.onclick = closeModal;
+  if (closeBtn) closeBtn.onclick = closeModal;
 
   // Check active timer status on modal open
   const updateActiveBadge = () => {
-    if (sleepTimer.isTimerActive() && activeBadge) {
+    if (sleepTimer.isActive() && activeBadge) {
       activeBadge.classList.remove('hidden');
-      const rem = sleepTimer.getRemainingSeconds();
-      const mins = Math.ceil(rem / 60);
+      const ms = sleepTimer.getRemaining();
+      const mins = Math.ceil(ms / 60000);
       if (activeText) activeText.textContent = `Đang hẹn giờ: Tắt sau ${mins} phút`;
     } else if (activeBadge) {
       activeBadge.classList.add('hidden');
     }
   };
 
+  // Bind timer callbacks for realtime updates
+  sleepTimer.onTick = (ms) => {
+    updateActiveBadge();
+    badgeCb?.(ms);
+  };
+
+  sleepTimer.onExpire = () => {
+    updateActiveBadge();
+    badgeCb?.(0);
+    showToastCb?.('Đã hết giờ: Đã dừng phát');
+    const video = document.querySelector('#watch-video');
+    if (video) video.pause();
+  };
+
   updateActiveBadge();
 
   // Stop timer button
-  stopBtn?.addEventListener('click', () => {
-    sleepTimer.stop();
-    updateActiveBadge();
-    badgeCb?.();
-    showToastCb('Đã hủy hẹn giờ tắt');
-    modalEl.classList.add('hidden');
-  });
+  if (stopBtn) {
+    stopBtn.onclick = () => {
+      sleepTimer.stop();
+      updateActiveBadge();
+      badgeCb?.(0);
+      showToastCb?.('Đã hủy hẹn giờ tắt');
+      closeModal();
+    };
+  }
 
   // Custom drawer toggle
-  customBtn?.addEventListener('click', () => {
-    customDrawer?.classList.toggle('hidden');
-  });
+  if (customBtn) {
+    customBtn.onclick = () => {
+      customDrawer?.classList.toggle('hidden');
+    };
+  }
 
   // 1-Click Option Items
   modalEl.querySelectorAll('.yt-timer-item[data-minutes]').forEach((item) => {
-    item.addEventListener('click', () => {
+    item.onclick = () => {
       const val = item.dataset.minutes;
       modalEl.querySelectorAll('.yt-timer-item').forEach((i) => i.classList.remove('active'));
       item.classList.add('active');
@@ -50,21 +76,21 @@ export function setupSleepTimerModal(modalEl, showToastCb, badgeCb) {
         if (videoEl && !isNaN(videoEl.duration) && videoEl.duration > videoEl.currentTime) {
           const remSecs = Math.max(30, Math.ceil(videoEl.duration - videoEl.currentTime));
           sleepTimer.startMinutes(Math.ceil(remSecs / 60), true);
-          showToastCb('Đã hẹn giờ: Tắt khi kết thúc video hiện tại');
+          showToastCb?.('Đã hẹn giờ: Tắt khi kết thúc video hiện tại');
         } else {
           sleepTimer.startMinutes(10, true);
-          showToastCb('Đã hẹn giờ: Tắt sau 10 phút');
+          showToastCb?.('Đã hẹn giờ: Tắt sau 10 phút');
         }
       } else {
         const mins = parseInt(val) || 30;
         sleepTimer.startMinutes(mins, true);
-        showToastCb(`Đã hẹn giờ: Tắt sau ${mins} phút`);
+        showToastCb?.(`Đã hẹn giờ: Tắt sau ${mins} phút`);
       }
 
-      badgeCb?.();
+      badgeCb?.(sleepTimer.getRemaining());
       updateActiveBadge();
-      modalEl.classList.add('hidden');
-    });
+      closeModal();
+    };
   });
 
   // Custom slider & inputs
@@ -94,17 +120,15 @@ export function setupSleepTimerModal(modalEl, showToastCb, badgeCb) {
   });
 
   // Custom Start Button
-  modalEl.querySelector('#timer-start')?.addEventListener('click', () => {
-    const mins = Math.max(minMinutes, parseInt(minutesInput?.value) || 30);
-    sleepTimer.startMinutes(mins, true);
-    showToastCb(`Đã hẹn giờ: Tắt sau ${mins} phút`);
-    badgeCb?.();
-    updateActiveBadge();
-    modalEl.classList.add('hidden');
-  });
-
-  // Close button
-  modalEl.querySelector('#sleep-timer-close')?.addEventListener('click', () => {
-    modalEl.classList.add('hidden');
-  });
+  const startBtn = modalEl.querySelector('#timer-start');
+  if (startBtn) {
+    startBtn.onclick = () => {
+      const mins = Math.max(minMinutes, parseInt(minutesInput?.value) || 30);
+      sleepTimer.startMinutes(mins, true);
+      showToastCb?.(`Đã hẹn giờ: Tắt sau ${mins} phút`);
+      badgeCb?.(sleepTimer.getRemaining());
+      updateActiveBadge();
+      closeModal();
+    };
+  }
 }
