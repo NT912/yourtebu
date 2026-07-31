@@ -61,19 +61,23 @@ const $$ = (sel) => document.querySelectorAll(sel);
 const videoEl = $('#video-element');
 
 function initApp() {
-  initI18n();
-  initTheme();
-  updateI18nUI();
+  try {
+    initI18n();
+    initTheme();
+    updateI18nUI();
 
-  initRouter();
-  initHeader();
-  initChipsBar();
-  initAuth();
-  initPlayer();
-  initModals();
-  initInfiniteScroll();
-
-  handleRoute();
+    initRouter();
+    initHeader();
+    initChipsBar();
+    initAuth();
+    initPlayer();
+    initModals();
+    initInfiniteScroll();
+  } catch (err) {
+    console.warn('[initApp] Initialization warning:', err);
+  } finally {
+    handleRoute();
+  }
 }
 
 if (document.readyState === 'loading') {
@@ -116,7 +120,8 @@ function updateActiveSidebarNav(view) {
 
 function handleRoute() {
   const hash = window.location.hash || '#/';
-  const [path, params] = hash.slice(1).split('?');
+  const rawPath = hash.startsWith('#') ? hash.slice(1) : hash;
+  const [path, params] = (rawPath || '/').split('?');
 
   if (state.liveChat) {
     state.liveChat.destroy();
@@ -134,8 +139,9 @@ function handleRoute() {
     return;
   }
 
-  switch (path) {
-    case '/':
+  const cleanPath = path === '' || path === '/' ? '/home' : path;
+
+  switch (cleanPath) {
     case '/home':
       state.currentView = 'home';
       $('#chips-bar')?.classList.remove('hidden');
@@ -152,6 +158,7 @@ function handleRoute() {
       const q = new URLSearchParams(params).get('q');
       state.currentSearchQuery = q || '';
       if (q) renderSearch(q);
+      else renderHome();
       break;
     }
     default:
