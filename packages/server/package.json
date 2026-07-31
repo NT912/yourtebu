@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/dev.js",
+    "dev": "node --watch src/dev.js",
     "start": "node src/index.js",
     "lint": "eslint src"
   },

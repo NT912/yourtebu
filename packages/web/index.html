@@ -39,30 +39,31 @@
 
       <div class="header__center">
         <div class="header__search-box">
-          <input type="text" id="search-input" class="header__search-input" placeholder="Tìm kiếm" autocomplete="off" />
-          <button id="btn-search" class="header__search-btn" aria-label="Search">
+          <input type="text" id="search-input" class="header__search-input" placeholder="Search on Yourtebu" data-i18n-placeholder="search.placeholder" autocomplete="off" spellcheck="false" />
+          <button id="btn-search" class="header__search-btn" aria-label="Search" data-i18n-title="nav.search">
             <span class="material-icons-round">search</span>
           </button>
+          <div id="search-suggestions" class="search-suggestions hidden"></div>
         </div>
       </div>
 
       <div class="header__right">
-        <button id="btn-sleep-timer" class="icon-btn" aria-label="Hẹn giờ tắt" title="Hẹn giờ tắt">
+        <button id="btn-sleep-timer" class="icon-btn" aria-label="Sleep timer" data-i18n-title="timer.title">
           <span class="material-icons-round">bedtime</span>
           <span id="timer-badge" class="timer-badge hidden"></span>
         </button>
-        <button id="btn-theme-toggle" class="icon-btn" aria-label="Giao diện" title="Đổi giao diện">
+        <button id="btn-theme-toggle" class="icon-btn" aria-label="Theme" data-i18n-title="theme.title">
           <span class="material-icons-round">light_mode</span>
         </button>
-        <button id="btn-lang-toggle" class="icon-btn" aria-label="Ngôn ngữ" title="Đổi ngôn ngữ">
+        <button id="btn-lang-toggle" class="icon-btn" aria-label="Language" data-i18n-title="lang.title">
           <span class="material-icons-round">language</span>
         </button>
-        <button id="btn-audio-mode" class="icon-btn" aria-label="Audio Only" title="Chỉ nghe nhạc">
+        <button id="btn-audio-mode" class="icon-btn" aria-label="Audio Only" data-i18n-title="player.audioOnly">
           <span class="material-icons-round">headphones</span>
         </button>
 
         <!-- SIGN IN / USER BUTTON (YOUTUBE STYLE) -->
-        <button id="btn-signin" class="signin-btn" aria-label="Đăng nhập">
+        <button id="btn-signin" class="signin-btn" aria-label="Sign in">
           <span class="material-icons-round" style="color:var(--text-link); font-size:20px;">account_circle</span>
           <span data-i18n="auth.signIn">Sign in</span>
         </button>
@@ -75,14 +76,6 @@
         <a href="#/" class="sidebar__item active" data-view="home">
           <span class="material-icons-round">home</span>
           <span class="sidebar__label" data-i18n="nav.home">Trang chủ</span>
-        </a>
-        <a href="#/trending" class="sidebar__item" data-view="trending">
-          <span class="material-icons-round">explore</span>
-          <span class="sidebar__label" data-i18n="nav.explore">Khám phá</span>
-        </a>
-        <a href="#/music" class="sidebar__item" data-view="music">
-          <span class="material-icons-round">music_note</span>
-          <span class="sidebar__label" data-i18n="nav.music">Nhạc</span>
         </a>
         <a href="#/history" class="sidebar__item" data-view="history">
           <span class="material-icons-round">history</span>
@@ -97,14 +90,6 @@
         <span class="material-icons-round">home</span>
         <span class="bottom-nav__label" data-i18n="nav.home">Trang chủ</span>
       </a>
-      <a href="#/trending" class="bottom-nav__item" data-view="trending">
-        <span class="material-icons-round">explore</span>
-        <span class="bottom-nav__label" data-i18n="nav.explore">Khám phá</span>
-      </a>
-      <a href="#/music" class="bottom-nav__item" data-view="music">
-        <span class="material-icons-round">music_note</span>
-        <span class="bottom-nav__label" data-i18n="nav.music">Nhạc</span>
-      </a>
       <a href="#/history" class="bottom-nav__item" data-view="history">
         <span class="material-icons-round">history</span>
         <span class="bottom-nav__label" data-i18n="nav.history">Lịch sử</span>
@@ -115,13 +100,12 @@
     <main id="main-content" class="main-content">
       <!-- CATEGORY CHIPS BAR -->
       <div id="chips-bar" class="chips-bar">
-        <button class="chip active" data-category="all">Tất cả</button>
-        <button class="chip" data-category="music">Âm nhạc</button>
-        <button class="chip" data-category="live">Trực tiếp</button>
-        <button class="chip" data-category="gaming">Trò chơi</button>
-        <button class="chip" data-category="news">Tin tức</button>
-        <button class="chip" data-category="vietnam">Việt Nam</button>
-        <button class="chip" data-category="recommended">Được đề xuất</button>
+        <button class="chip active" data-category="all" data-i18n="categories.all">Tất cả</button>
+        <button class="chip" data-category="music" data-i18n="categories.music">Âm nhạc</button>
+        <button class="chip" data-category="live" data-i18n="categories.live">Trực tiếp</button>
+        <button class="chip" data-category="gaming" data-i18n="categories.gaming">Trò chơi</button>
+        <button class="chip" data-category="news" data-i18n="categories.news">Tin tức</button>
+        <button class="chip" data-category="vietnam" data-i18n="categories.vietnam">Việt Nam</button>
       </div>
 
       <div id="view-container" class="view-container"></div>
@@ -256,13 +240,7 @@
           <p style="margin-bottom:20px; color:var(--text-secondary); font-size:14px;" data-i18n="auth.demoNotice">Đồng bộ kênh đăng ký và nội dung đề xuất cá nhân hóa</p>
 
           <!-- OFFICIAL GOOGLE IDENTITY GIS BUTTON CONTAINER -->
-          <div id="g_id_gis_container" style="display:flex; justify-content:center; margin-bottom:16px;"></div>
-
-          <!-- FALLBACK GOOGLE BUTTON -->
-          <button id="btn-google-login" class="modal-btn modal-btn--primary" style="display:inline-flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:12px; font-weight:500;">
-            <svg width="20" height="20" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.1.83-.64 2.08-1.84 2.92l2.84 2.2c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.84-2.2c-.76.53-1.78.9-3.12.9-2.38 0-4.41-1.57-5.13-3.74L.97 13.04C2.45 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.87 10.78c-.18-.53-.28-1.1-.28-1.78s.1-1.25.28-1.78L.97 4.96C.35 6.18 0 7.55 0 9s.35 2.82.97 4.04l2.9-2.26z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.46 3.44 1.34l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.45 2.02.97 4.96l2.9 2.26C4.59 5.05 6.62 3.58 9 3.58z"/></svg>
-            <span data-i18n="auth.googleSignIn">Đăng nhập bằng Google</span>
-          </button>
+          <div id="g_id_gis_container" style="display:flex; justify-content:center; margin:10px 0 20px;"></div>
         </div>
       </div>
     </div>

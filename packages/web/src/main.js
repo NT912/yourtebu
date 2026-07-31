@@ -15,6 +15,7 @@ import {
   fetchVideoInfo,
   fetchSearchResults,
   fetchTrending,
+  fetchSuggestions,
   fetchPersonalizedFeed,
 } from './services/api.js';
 import { addToWatchHistory, getRecentVideoIds } from './services/watch-history.js';
@@ -47,12 +48,19 @@ const state = {
   currentSearchQuery: '',
 };
 
+const gradients = [
+  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+  'linear-gradient(135deg, #ff4e50 0%, #f9d423 100%)',
+  'linear-gradient(135deg, #7b4397 0%, #dc2430 100%)',
+  'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
+];
+
 // DOM Refs
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 const videoEl = $('#video-element');
 
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   initI18n();
   initTheme();
   updateI18nUI();
@@ -66,7 +74,13 @@ document.addEventListener('DOMContentLoaded', () => {
   initInfiniteScroll();
 
   handleRoute();
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 // Router
 function initRouter() {
@@ -78,6 +92,26 @@ function resetPaginationState() {
   state.isLoadingMore = false;
   state.hasMore = true;
   state.loadedVideoIds.clear();
+}
+
+function updateActiveSidebarNav(view) {
+  $$('.sidebar__item').forEach((item) => {
+    const itemNavView = item.dataset.view;
+    if (itemNavView === view || (view === 'home' && itemNavView === 'home')) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
+
+  $$('.bottom-nav__item').forEach((item) => {
+    const itemNavView = item.dataset.view;
+    if (itemNavView === view || (view === 'home' && itemNavView === 'home')) {
+      item.classList.add('active');
+    } else {
+      item.classList.remove('active');
+    }
+  });
 }
 
 function handleRoute() {
@@ -105,16 +139,6 @@ function handleRoute() {
       $('#chips-bar')?.classList.remove('hidden');
       renderHome();
       break;
-    case '/trending':
-      state.currentView = 'trending';
-      $('#chips-bar')?.classList.add('hidden');
-      renderTrending();
-      break;
-    case '/music':
-      state.currentView = 'music';
-      $('#chips-bar')?.classList.add('hidden');
-      renderMusic();
-      break;
     case '/history':
       state.currentView = 'history';
       $('#chips-bar')?.classList.add('hidden');
@@ -130,21 +154,129 @@ function handleRoute() {
     }
     default:
       state.currentView = 'home';
+      $('#chips-bar')?.classList.remove('hidden');
       renderHome();
   }
+
+  updateActiveSidebarNav(state.currentView);
 }
 
-// Header
+// Header & Search Autocomplete with Full Keyboard Navigation (Up/Down/Enter/Escape)
 function initHeader() {
   const searchInput = $('#search-input');
-  $('#btn-search')?.addEventListener('click', () => {
-    const q = searchInput?.value.trim();
-    if (q) window.location.hash = `#/search?q=${encodeURIComponent(q)}`;
-  });
+  const suggestionsBox = $('#search-suggestions');
+  let suggestTimeout = null;
+  let activeIndex = -1;
+
+  const performSearch = (query) => {
+    const q = (query || searchInput?.value || '').trim();
+    if (q) {
+      if (searchInput) searchInput.value = q;
+      if (suggestionsBox) suggestionsBox.classList.add('hidden');
+      activeIndex = -1;
+      window.location.hash = `#/search?q=${encodeURIComponent(q)}`;
+    }
+  };
+
+  const updateActiveItem = (items) => {
+    items.forEach((item, idx) => {
+      if (idx === activeIndex) {
+        item.classList.add('active');
+        item.scrollIntoView({ block: 'nearest' });
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  };
+
+  $('#btn-search')?.addEventListener('click', () => performSearch());
+
+  // Keyboard Navigation: Arrow Up / Down, Enter, Escape (with IME Telex support)
   searchInput?.addEventListener('keydown', (e) => {
+    // Ignore IME Telex composition keys (Unikey / Windows IME)
+    if (e.isComposing || e.keyCode === 229) return;
+
+    const items = suggestionsBox
+      ? Array.from(suggestionsBox.querySelectorAll('.suggestion-item'))
+      : [];
+    const isVisible = suggestionsBox && !suggestionsBox.classList.contains('hidden');
+
+    if (isVisible && items.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        activeIndex = (activeIndex + 1) % items.length;
+        updateActiveItem(items);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        activeIndex = activeIndex <= 0 ? items.length - 1 : activeIndex - 1;
+        updateActiveItem(items);
+        return;
+      }
+      if (e.key === 'Escape') {
+        suggestionsBox.classList.add('hidden');
+        activeIndex = -1;
+        return;
+      }
+    }
+
     if (e.key === 'Enter') {
-      const q = searchInput.value.trim();
-      if (q) window.location.hash = `#/search?q=${encodeURIComponent(q)}`;
+      e.preventDefault();
+      if (isVisible && activeIndex >= 0 && items[activeIndex]) {
+        performSearch(items[activeIndex].dataset.query);
+      } else {
+        performSearch();
+      }
+    }
+  });
+
+  // Autocomplete Suggestions Dropdown as user types
+  searchInput?.addEventListener('input', () => {
+    const q = searchInput.value.trim();
+    if (suggestTimeout) clearTimeout(suggestTimeout);
+    activeIndex = -1;
+
+    if (!q) {
+      if (suggestionsBox) suggestionsBox.classList.add('hidden');
+      return;
+    }
+
+    suggestTimeout = setTimeout(async () => {
+      try {
+        const suggestions = await fetchSuggestions(q);
+        if (Array.isArray(suggestions) && suggestions.length > 0 && searchInput.value.trim()) {
+          suggestionsBox.innerHTML = suggestions
+            .map(
+              (item) => `
+            <div class="suggestion-item" data-query="${item.replace(/"/g, '&quot;')}">
+              <span class="material-icons-round" style="color:var(--text-secondary); font-size:18px;">search</span>
+              <span>${item}</span>
+            </div>
+          `,
+            )
+            .join('');
+          suggestionsBox.classList.remove('hidden');
+
+          suggestionsBox.querySelectorAll('.suggestion-item').forEach((el) => {
+            el.addEventListener('click', () => {
+              performSearch(el.dataset.query);
+            });
+          });
+        } else {
+          suggestionsBox?.classList.add('hidden');
+        }
+      } catch {
+        suggestionsBox?.classList.add('hidden');
+      }
+    }, 150);
+  });
+
+  // Hide suggestions when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.header__search-box')) {
+      suggestionsBox?.classList.add('hidden');
+      activeIndex = -1;
     }
   });
 
@@ -180,6 +312,10 @@ function initHeader() {
     const next = current === 'vi' ? 'en' : 'vi';
     setLang(next);
     updateI18nUI();
+    if (state.currentView === 'home') renderHome();
+    else if (state.currentView === 'history') renderHistory();
+    else if (state.currentView === 'search' && state.currentSearchQuery)
+      renderSearch(state.currentSearchQuery);
     showToast(`${t('lang.title')}: ${t(`lang.${next}`)}`);
   });
 
@@ -195,6 +331,28 @@ function initHeader() {
   });
 }
 
+function updateI18nUI() {
+  document.documentElement.lang = getLang();
+
+  $$('[data-i18n]').forEach((el) => {
+    const key = el.dataset.i18n;
+    if (key) el.textContent = t(key);
+  });
+
+  $$('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.dataset.i18nPlaceholder;
+    if (key) el.placeholder = t(key);
+  });
+
+  $$('[data-i18n-title]').forEach((el) => {
+    const key = el.dataset.i18nTitle;
+    if (key) {
+      el.title = t(key);
+      el.setAttribute('aria-label', t(key));
+    }
+  });
+}
+
 function updateThemeIcon() {
   const theme = getTheme();
   const icon = $('#btn-theme-toggle .material-icons-round');
@@ -205,21 +363,6 @@ function updateThemeIcon() {
 }
 
 function initChipsBar() {
-  const chipsBar = $('#chips-bar');
-  if (chipsBar && state.user) {
-    // Personalize category chips with User Name chip
-    const userChipText =
-      getLang() === 'vi' ? `Đề xuất cho ${state.user.name}` : `For ${state.user.name}`;
-    let userChip = chipsBar.querySelector('.chip-user');
-    if (!userChip) {
-      userChip = document.createElement('button');
-      userChip.className = 'chip chip-user';
-      userChip.dataset.category = 'recommended';
-      chipsBar.insertBefore(userChip, chipsBar.children[2] || chipsBar.children[1]);
-    }
-    userChip.textContent = userChipText;
-  }
-
   const chips = $$('.chip');
   chips.forEach((chip) => {
     chip.addEventListener('click', () => {
@@ -232,15 +375,13 @@ function initChipsBar() {
   });
 }
 
-let tokenClient = null;
-
 function initAuth() {
   const signinBtn = $('#btn-signin');
   const authModal = $('#auth-modal');
 
   updateUserUI();
 
-  // 1. Initialize Standard Google Identity Services (GIS) for basic login (always works, non-sensitive)
+  // Single clean Google Identity Services button (always works without 403 access_denied)
   const initGIS = () => {
     const gisContainer = $('#g_id_gis_container');
     if (window.google?.accounts?.id && gisContainer) {
@@ -255,25 +396,12 @@ function initAuth() {
         size: 'large',
         text: 'signin_with',
         shape: 'pill',
+        width: 250,
       });
     }
   };
 
-  // 2. Initialize OAuth2 Token Client for optional YouTube scope
-  const initOAuthTokenClient = () => {
-    if (window.google?.accounts?.oauth2) {
-      tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/youtube.readonly profile email',
-        callback: handleGoogleTokenResponse,
-      });
-    }
-  };
-
-  setTimeout(() => {
-    initGIS();
-    initOAuthTokenClient();
-  }, 800);
+  setTimeout(initGIS, 600);
 
   signinBtn?.addEventListener('click', () => {
     if (state.user) {
@@ -294,14 +422,6 @@ function initAuth() {
   $('#auth-close')?.addEventListener('click', () => {
     authModal?.classList.add('hidden');
   });
-
-  $('#btn-google-login')?.addEventListener('click', () => {
-    if (tokenClient) {
-      tokenClient.requestAccessToken();
-    } else {
-      performMockLogin();
-    }
-  });
 }
 
 function handleGoogleCredentialResponse(response) {
@@ -318,51 +438,9 @@ function handleGoogleCredentialResponse(response) {
     $('#auth-modal')?.classList.add('hidden');
     showToast(`${t('auth.welcome')}, ${user.name}!`);
     renderHome();
-  }
-}
-
-async function handleGoogleTokenResponse(response) {
-  if (response.error) {
-    if (response.error === 'access_denied') {
-      // Access denied happens if email is not added to Google Cloud Console Test Users for sensitive scopes
-      performMockLogin();
-      showToast(
-        'Đã đăng nhập tài khoản. (Để dùng YouTube Scope, hãy thêm email vào Test Users trên Google Cloud Console)',
-      );
-      return;
-    }
-    showToast('Đăng nhập thất bại: ' + response.error);
-    performMockLogin();
-    return;
-  }
-
-  const accessToken = response.access_token;
-  state.accessToken = accessToken;
-  localStorage.setItem('yourtebu_access_token', accessToken);
-
-  // Fetch Google User Profile info with access_token
-  try {
-    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (res.ok) {
-      const profile = await res.json();
-      const user = {
-        name: profile.name || profile.given_name || 'Trường Nhật',
-        email: profile.email || 'tt912002@gmail.com',
-        picture: profile.picture || '',
-      };
-      state.user = user;
-      localStorage.setItem('yourtebu_user', JSON.stringify(user));
-    }
-  } catch {
+  } else {
     performMockLogin();
   }
-
-  updateUserUI();
-  $('#auth-modal')?.classList.add('hidden');
-  showToast(`${t('auth.welcome')}, ${state.user.name}! Đã kết nối đề xuất YouTube cá nhân hóa.`);
-  renderHome();
 }
 
 function performMockLogin() {
@@ -399,13 +477,6 @@ function updateUserUI() {
     `;
     signinBtn.title = t('auth.signIn');
   }
-}
-
-function updateI18nUI() {
-  $$('[data-i18n]').forEach((el) => {
-    const key = el.dataset.i18n;
-    if (key) el.textContent = t(key);
-  });
 }
 
 // Player
@@ -520,65 +591,13 @@ async function renderHome() {
   const container = $('#view-container');
   container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
 
-  let personalizedBadge = '';
-  if (state.user) {
-    personalizedBadge = `
-      <div style="margin-bottom:20px; padding:14px 20px; background:var(--bg-tertiary); border-radius:var(--radius-lg); border-left:4px solid var(--text-link); display:flex; align-items:center; justify-content:space-between; gap:12px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span class="material-icons-round" style="color:var(--text-link); font-size:28px;">account_circle</span>
-          <div>
-            <span style="font-weight:600; font-size:15px; color:var(--text-primary);">Đề xuất cá nhân hóa cho ${state.user.name}</span>
-            <p style="font-size:13px; color:var(--text-secondary); margin:2px 0 0;">Tổng hợp từ 📺 Kênh đăng ký • ❤️ Video đã thích • 🔄 Lịch sử đã xem</p>
-          </div>
-        </div>
-        ${
-          !state.accessToken
-            ? `<button id="btn-reconnect-youtube" style="padding:6px 14px; background:var(--text-link); color:white; border:none; border-radius:var(--radius-md); font-weight:600; font-size:12px; cursor:pointer;">Cấp quyền YouTube</button>`
-            : ''
-        }
-      </div>
-    `;
-  }
-
   try {
-    let videos = [];
-    // 1. Try 3-source personalized feed if logged in and access_token exists
-    if (state.user && state.accessToken && state.activeCategory === 'all') {
-      const recentWatchedIds = getRecentVideoIds(5);
-      const personalized = await fetchPersonalizedFeed(state.accessToken, recentWatchedIds);
-      if (Array.isArray(personalized) && personalized.length > 0) {
-        videos = personalized;
-      }
-    }
-
-    // 2. Fallback to dynamic trending feed
-    if (videos.length === 0) {
-      videos = await fetchTrending('VN', 1, state.activeCategory);
-    }
-
+    let videos = await fetchTrending('VN', 1, state.activeCategory);
     registerLoadedVideoIds(videos);
-    container.innerHTML = `${personalizedBadge}<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
-
-    // Re-connect YouTube button listener
-    $('#btn-reconnect-youtube')?.addEventListener('click', () => {
-      if (tokenClient) tokenClient.requestAccessToken();
-    });
-  } catch {
-    container.innerHTML = `${personalizedBadge}<div class="video-grid"><p style="color:var(--text-secondary); grid-column:1/-1;">Không thể tải video. Hãy thử lại sau.</p></div>`;
-  }
-}
-
-async function renderTrending() {
-  const container = $('#view-container');
-  container.innerHTML = `<div class="video-grid">${renderSkeletons(16)}</div>`;
-  try {
-    const videos = await fetchTrending('VN', 1, 'all');
-    registerLoadedVideoIds(videos);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
+    container.innerHTML = `<div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
     attachCardEvents(container);
   } catch {
-    container.innerHTML = `<h2 style="margin-bottom:16px;">🔥 ${t('trending.title')}</h2><p style="color:var(--text-secondary);">Không thể tải video.</p>`;
+    container.innerHTML = `<div class="video-grid"><p style="color:var(--text-secondary); grid-column:1/-1;">Không thể tải video. Hãy thử lại sau.</p></div>`;
   }
 }
 
@@ -602,15 +621,104 @@ function renderHistory() {
 
 async function renderSearch(query) {
   const container = $('#view-container');
-  container.innerHTML = `<div class="video-grid">${renderSkeletons(12)}</div>`;
+  container.innerHTML = `
+    <div class="search-results-container">
+      <h2 style="margin-bottom:20px; font-size:20px; font-weight:600;">${t('search.results', { query })}</h2>
+      <div class="search-results-list">${renderSearchSkeletons(6)}</div>
+    </div>
+  `;
   try {
     const videos = await fetchSearchResults(query, 'all', 1);
     registerLoadedVideoIds(videos);
-    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><div class="video-grid">${videos.map((v, i) => renderCard(v, i)).join('')}</div>`;
-    attachCardEvents(container);
+    if (Array.isArray(videos) && videos.length > 0) {
+      videos.sort((a, b) => (b.views || 0) - (a.views || 0));
+      container.innerHTML = `
+        <div class="search-results-container">
+          <h2 style="margin-bottom:20px; font-size:20px; font-weight:600;">${t('search.results', { query })}</h2>
+          <div class="search-results-list">${videos.map((v, i) => renderSearchCard(v, i)).join('')}</div>
+        </div>
+      `;
+      attachCardEvents(container);
+    } else {
+      container.innerHTML = `
+        <div class="search-results-container">
+          <h2 style="margin-bottom:20px; font-size:20px; font-weight:600;">${t('search.results', { query })}</h2>
+          <p style="color:var(--text-secondary);">${t('search.noResults')}</p>
+        </div>
+      `;
+    }
   } catch {
-    container.innerHTML = `<h2 style="margin-bottom:16px;">${t('search.results', { query })}</h2><p style="color:var(--text-secondary);">Không tìm thấy kết quả.</p>`;
+    container.innerHTML = `
+      <div class="search-results-container">
+        <h2 style="margin-bottom:20px; font-size:20px; font-weight:600;">${t('search.results', { query })}</h2>
+        <p style="color:var(--text-secondary);">${t('common.loadError')}</p>
+      </div>
+    `;
   }
+}
+
+function renderSearchCard(v, idx = 0) {
+  const videoId = v.videoId || 'kJQP7kiw5Fk';
+  const ytWatchUrl = `${YOUTUBE_WATCH_BASE}${videoId}`;
+  const duration = v.duration ? formatDuration(v.duration) : '4:15';
+  const views = v.views ? formatViews(v.views, getLang()) : `1.2M ${t('common.views')}`;
+  const gradient = gradients[idx % gradients.length];
+  const uploadedDate = v.uploadedDate || t('common.newDate');
+  const description = v.description || '';
+
+  const rawThumb =
+    v.thumbnail && v.thumbnail.startsWith('http')
+      ? v.thumbnail
+      : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const thumbUrl = `https://wsrv.nl/?url=${encodeURIComponent(rawThumb)}`;
+  const fallbackThumb1 = `https://images.weserv.nl/?url=${encodeURIComponent(rawThumb)}`;
+  const fallbackThumb2 = rawThumb;
+
+  const safeAvatarUrl =
+    v.uploaderAvatar && v.uploaderAvatar.startsWith('http')
+      ? v.uploaderAvatar.replace('http://', 'https://')
+      : '';
+
+  const avatarHtml = safeAvatarUrl
+    ? `<img src="${safeAvatarUrl}" class="search-card__uploader-avatar" onerror="this.style.display='none'" />`
+    : `<span class="material-icons-round" style="font-size:20px; color:var(--text-link);">account_circle</span>`;
+
+  return `
+    <div class="video-card search-card" data-video-id="${videoId}">
+      <div class="search-card__thumbnail-box" style="background:${gradient};">
+        <img src="${thumbUrl}" referrerpolicy="no-referrer" class="search-card__img" loading="eager" onerror="if(!this.dataset.t1){this.dataset.t1='1';this.src='${fallbackThumb1}';}else if(!this.dataset.t2){this.dataset.t2='1';this.src='${fallbackThumb2}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}" />
+        <div class="thumbnail-album-cover" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0; background:linear-gradient(135deg, rgba(30,30,46,0.95), rgba(74,20,140,0.9)); flex-direction:column; align-items:center; justify-content:center; padding:10px; text-align:center; box-sizing:border-box;">
+          <span class="material-icons-round" style="font-size:32px; color:#ffffff; margin-bottom:4px; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));">music_note</span>
+          <span style="font-size:11px; font-weight:600; color:#ffffff; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.2; text-shadow:0 1px 4px rgba(0,0,0,0.6);">${v.title}</span>
+        </div>
+        <span class="material-icons-round" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:40px; color:rgba(255,255,255,0.95); pointer-events:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6)); z-index:3;">play_circle_filled</span>
+        <span style="position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; font-size:11px; font-weight:500; border-radius:4px; z-index:4;">${duration}</span>
+      </div>
+      <div class="search-card__info">
+        <h3 class="search-card__title">${v.title}</h3>
+        <div class="search-card__meta">${views} • ${uploadedDate}</div>
+        <div class="search-card__uploader">
+          ${avatarHtml}
+          <span>${v.uploaderName || 'YouTube Creator'}</span>
+        </div>
+        ${description ? `<p class="search-card__description">${description}</p>` : ''}
+        <div style="margin-top:auto;">
+          <a href="${ytWatchUrl}" target="_blank" rel="noopener noreferrer" class="yt-open-btn" onclick="event.stopPropagation();" title="${t('player.openOnYoutube')}" style="padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:4px;">
+            <span class="material-icons-round" style="font-size:14px; color:var(--accent-red);">open_in_new</span>
+            <span>YouTube</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSearchSkeletons(n) {
+  return Array(n)
+    .fill(
+      '<div style="height:180px; background:var(--bg-tertiary); border-radius:12px; margin-bottom:16px;"></div>',
+    )
+    .join('');
 }
 
 // Infinite Scroll Engine
@@ -628,8 +736,9 @@ function initInfiniteScroll() {
 }
 
 async function loadMoreVideos() {
-  const grid = $('.video-grid');
-  if (!grid || state.isLoadingMore) return;
+  const isSearchList = !!$('.search-results-list');
+  const containerEl = $('.search-results-list') || $('.video-grid');
+  if (!containerEl || state.isLoadingMore) return;
 
   state.isLoadingMore = true;
   state.page += 1;
@@ -642,7 +751,7 @@ async function loadMoreVideos() {
   loaderEl.style.padding = '20px';
   loaderEl.innerHTML =
     '<div style="display:inline-block;width:32px;height:32px;border:3px solid var(--border-color);border-top-color:var(--text-link);border-radius:50%;animation:spin 0.8s linear infinite;"></div>';
-  grid.appendChild(loaderEl);
+  containerEl.appendChild(loaderEl);
 
   try {
     let newVideos = [];
@@ -665,8 +774,14 @@ async function loadMoreVideos() {
     registerLoadedVideoIds(newVideos);
 
     const tempWrapper = document.createElement('div');
-    tempWrapper.innerHTML = newVideos.map((v, i) => renderCard(v, state.page * 20 + i)).join('');
-    Array.from(tempWrapper.children).forEach((card) => grid.appendChild(card));
+    if (isSearchList) {
+      tempWrapper.innerHTML = newVideos
+        .map((v, i) => renderSearchCard(v, state.page * 20 + i))
+        .join('');
+    } else {
+      tempWrapper.innerHTML = newVideos.map((v, i) => renderCard(v, state.page * 20 + i)).join('');
+    }
+    Array.from(tempWrapper.children).forEach((card) => containerEl.appendChild(card));
     attachCardEvents($('#view-container'));
   } catch {
     loaderEl.remove();
@@ -675,29 +790,21 @@ async function loadMoreVideos() {
   }
 }
 
-const gradients = [
-  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-  'linear-gradient(135deg, #ff4e50 0%, #f9d423 100%)',
-  'linear-gradient(135deg, #7b4397 0%, #dc2430 100%)',
-  'linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)',
-];
-
 // Helpers
 function renderCard(v, idx = 0) {
   const videoId = v.videoId || 'kJQP7kiw5Fk';
   const ytWatchUrl = `${YOUTUBE_WATCH_BASE}${videoId}`;
   const duration = v.duration ? formatDuration(v.duration) : '4:15';
-  const views = v.views
-    ? formatViews(v.views, getLang())
-    : getLang() === 'vi'
-      ? '1.2M lượt xem'
-      : '1.2M views';
+  const views = v.views ? formatViews(v.views, getLang()) : `1.2M ${t('common.views')}`;
   const gradient = gradients[idx % gradients.length];
 
-  // Use server-side proxy at /api/thumbnail/:id with wsrv.nl & direct fallback
-  const thumbUrl = `/api/thumbnail/${videoId}`;
-  const wsrvFallback = `https://wsrv.nl/?url=https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-  const directFallback = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const rawThumb =
+    v.thumbnail && v.thumbnail.startsWith('http')
+      ? v.thumbnail
+      : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const thumbUrl = `https://wsrv.nl/?url=${encodeURIComponent(rawThumb)}`;
+  const fallbackThumb1 = `https://images.weserv.nl/?url=${encodeURIComponent(rawThumb)}`;
+  const fallbackThumb2 = rawThumb;
 
   // Source Badge for Personalized Recommendations
   let sourceBadge = '';
@@ -713,9 +820,13 @@ function renderCard(v, idx = 0) {
     <div class="video-card" data-video-id="${videoId}">
       <div class="video-card__thumbnail-box" style="background:${gradient};">
         ${sourceBadge}
-        <img src="${thumbUrl}" class="video-card__img" loading="lazy" onerror="if(!this.dataset.retry){this.dataset.retry='1';this.src='${wsrvFallback}';}else if(this.dataset.retry==='1'){this.dataset.retry='2';this.src='${directFallback}';}else{this.style.display='none';}" />
-        <span class="material-icons-round" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:44px; color:rgba(255,255,255,0.95); pointer-events:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6));">play_circle_filled</span>
-        <span style="position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; font-size:11px; font-weight:500; border-radius:4px; z-index:2;">${duration}</span>
+        <img src="${thumbUrl}" referrerpolicy="no-referrer" class="video-card__img" loading="lazy" onerror="if(!this.dataset.t1){this.dataset.t1='1';this.src='${fallbackThumb1}';}else if(!this.dataset.t2){this.dataset.t2='1';this.src='${fallbackThumb2}';}else{this.style.display='none';this.nextElementSibling.style.display='flex';}" />
+        <div class="thumbnail-album-cover" style="display:none; width:100%; height:100%; position:absolute; top:0; left:0; background:linear-gradient(135deg, rgba(30,30,46,0.95), rgba(74,20,140,0.9)); flex-direction:column; align-items:center; justify-content:center; padding:10px; text-align:center; box-sizing:border-box;">
+          <span class="material-icons-round" style="font-size:32px; color:#ffffff; margin-bottom:4px; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.5));">music_note</span>
+          <span style="font-size:11px; font-weight:600; color:#ffffff; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.2; text-shadow:0 1px 4px rgba(0,0,0,0.6);">${v.title}</span>
+        </div>
+        <span class="material-icons-round" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:44px; color:rgba(255,255,255,0.95); pointer-events:none; filter:drop-shadow(0 2px 6px rgba(0,0,0,0.6)); z-index:3;">play_circle_filled</span>
+        <span style="position:absolute; bottom:6px; right:6px; background:rgba(0,0,0,0.85); color:white; padding:2px 6px; font-size:11px; font-weight:500; border-radius:4px; z-index:4;">${duration}</span>
       </div>
       <div style="padding:10px 4px 4px; display:flex; flex-direction:column; flex:1;">
         <h3 style="font-size:14px; font-weight:500; line-height:1.35; margin-bottom:6px; color:var(--text-primary); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${v.title}</h3>

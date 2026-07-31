@@ -1,5 +1,12 @@
 export const GOOGLE_CLIENT_ID =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CLIENT_ID) ||
+  (typeof process !== 'undefined' && process.env?.GOOGLE_CLIENT_ID) ||
   '370117982466-fuc92d8krhloqbu7e6lad91lj4ia4gg2.apps.googleusercontent.com';
+
+export const YOUTUBE_API_KEY =
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_YOUTUBE_API_KEY) ||
+  (typeof process !== 'undefined' && process.env?.YOUTUBE_API_KEY) ||
+  'AIzaSyBkUn2xrB4sBJpSbbgmdWmbx-7K5mwSuk4';
 
 export const MIN_SLEEP_TIMER_MINUTES = 5;
 export const MAX_SLEEP_TIMER_MINUTES = 240;

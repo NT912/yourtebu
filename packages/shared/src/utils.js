@@ -76,3 +76,16 @@ export function parseJwt(token) {
     return null;
   }
 }
+
+/**
+ * Strips Vietnamese diacritics / accents e.g. "kẻ say tình 2" -> "ke say tinh 2"
+ */
+export function removeVietnameseTones(str) {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase();
+}
