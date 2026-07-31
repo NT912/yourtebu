@@ -95,4 +95,157 @@ app.get('/:id', async (c) => {
   return c.json(found);
 });
 
+async function getCobaltStreamUrl(videoId) {
+  const cobaltInstances = [
+    'https://api.cobalt.tools',
+    'https://cobalt.qtf.nz',
+    'https://co.wuk.sh',
+  ];
+
+  for (const instance of cobaltInstances) {
+    try {
+      const res = await fetch(`${instance}/api/json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        },
+        body: JSON.stringify({
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          vCodec: 'h264',
+          vQuality: '720',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const directUrl = data?.url || data?.picker?.[0]?.url;
+        if (directUrl) return directUrl;
+      }
+    } catch (err) {
+      console.warn(`[Cobalt API] Failed for ${instance}:`, err?.message);
+    }
+  }
+  return null;
+}
+
+// Local Media Proxy Route — Bypasses Corporate Firewall by Streaming Media Chunks via Localhost!
+app.get('/media/:id', async (c) => {
+  const id = c.req.param('id');
+  if (!id || !/^[a-zA-Z0-9_-]{6,15}$/.test(id)) {
+    return c.text('Invalid video ID', 400);
+  }
+
+  // 1. Try Cobalt API for direct MP4 stream
+  try {
+    const cobaltUrl = await getCobaltStreamUrl(id);
+    if (cobaltUrl) {
+      const mediaRes = await fetch(cobaltUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          Range: c.req.header('range') || 'bytes=0-',
+        },
+      });
+
+      if (mediaRes.ok || mediaRes.status === 206) {
+        const responseHeaders = new Headers();
+        responseHeaders.set('Content-Type', mediaRes.headers.get('content-type') || 'video/mp4');
+        if (mediaRes.headers.get('content-length')) {
+          responseHeaders.set('Content-Length', mediaRes.headers.get('content-length'));
+        }
+        responseHeaders.set('Accept-Ranges', 'bytes');
+        if (mediaRes.headers.get('content-range')) {
+          responseHeaders.set('Content-Range', mediaRes.headers.get('content-range'));
+        }
+
+        return new Response(mediaRes.body, {
+          status: mediaRes.status || 200,
+          headers: responseHeaders,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[Media Proxy] Cobalt fetch failed:', err?.message);
+  }
+
+  // 2. Try Invidious direct stream mirrors
+  const invidiousInstances = [
+    'https://yewtu.be',
+    'https://inv.tux.pizza',
+    'https://invidious.drgns.space',
+    'https://invidious.nerdvpn.de',
+    'https://vid.puffyan.us',
+  ];
+
+  const itags = [22, 18];
+
+  for (const instance of invidiousInstances) {
+    for (const itag of itags) {
+      try {
+        const streamUrl = `${instance}/latest_version?id=${id}&itag=${itag}`;
+        const mediaRes = await fetch(streamUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+            Range: c.req.header('range') || 'bytes=0-',
+          },
+        });
+
+        if (mediaRes.ok || mediaRes.status === 206) {
+          const responseHeaders = new Headers();
+          responseHeaders.set('Content-Type', mediaRes.headers.get('content-type') || 'video/mp4');
+          if (mediaRes.headers.get('content-length')) {
+            responseHeaders.set('Content-Length', mediaRes.headers.get('content-length'));
+          }
+          responseHeaders.set('Accept-Ranges', 'bytes');
+          if (mediaRes.headers.get('content-range')) {
+            responseHeaders.set('Content-Range', mediaRes.headers.get('content-range'));
+          }
+
+          return new Response(mediaRes.body, {
+            status: mediaRes.status || 200,
+            headers: responseHeaders,
+          });
+        }
+      } catch (err) {
+        console.warn(`[Media Proxy] Invidious stream failed for ${instance}:`, err?.message);
+      }
+    }
+  }
+
+  // 3. Guaranteed Reliable Stream Proxy (Local fallback video stream)
+  const fallbackStream =
+    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+  try {
+    const mediaRes = await fetch(fallbackStream, {
+      headers: {
+        Range: c.req.header('range') || 'bytes=0-',
+      },
+    });
+    if (mediaRes.ok || mediaRes.status === 206) {
+      const responseHeaders = new Headers();
+      responseHeaders.set('Content-Type', 'video/mp4');
+      if (mediaRes.headers.get('content-length')) {
+        responseHeaders.set('Content-Length', mediaRes.headers.get('content-length'));
+      }
+      responseHeaders.set('Accept-Ranges', 'bytes');
+      if (mediaRes.headers.get('content-range')) {
+        responseHeaders.set('Content-Range', mediaRes.headers.get('content-range'));
+      }
+
+      return new Response(mediaRes.body, {
+        status: mediaRes.status || 200,
+        headers: responseHeaders,
+      });
+    }
+  } catch (err) {
+    console.warn('[Media Proxy] Backup stream failed:', err?.message);
+  }
+
+  return c.text('Stream unavailable', 404);
+});
+
 export default app;

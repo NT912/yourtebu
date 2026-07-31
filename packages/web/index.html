@@ -111,118 +111,73 @@
       <div id="view-container" class="view-container"></div>
     </main>
 
-    <!-- FULL PLAYER -->
-    <div id="full-player" class="full-player hidden">
-      <div class="full-player__header">
-        <button id="fp-collapse" class="icon-btn"><span class="material-icons-round">keyboard_arrow_down</span></button>
-        <span id="fp-header-title" class="full-player__header-title">Đang phát</span>
-        <div></div>
-      </div>
-      <div class="full-player__video-container">
-        <video id="video-element" class="full-player__video" playsinline webkit-playsinline></video>
-        <div id="video-overlay" class="video-overlay">
-          <div class="video-overlay__center">
-            <button id="fp-rewind" class="icon-btn icon-btn--lg"><span class="material-icons-round">replay_10</span></button>
-            <button id="fp-play-pause" class="icon-btn icon-btn--xl"><span class="material-icons-round">play_arrow</span></button>
-            <button id="fp-forward" class="icon-btn icon-btn--lg"><span class="material-icons-round">forward_10</span></button>
-          </div>
-          <div class="video-overlay__bottom">
-            <div class="progress-bar-container">
-              <span id="fp-time-current" class="time-label">0:00</span>
-              <input type="range" id="fp-progress" class="progress-bar" min="0" max="100" value="0" step="0.1" />
-              <span id="fp-time-total" class="time-label">0:00</span>
-            </div>
-            <div class="player-controls-row">
-              <div class="player-controls-left">
-                <button id="fp-prev" class="icon-btn"><span class="material-icons-round">skip_previous</span></button>
-                <button id="fp-play-btn" class="icon-btn"><span class="material-icons-round">play_arrow</span></button>
-                <button id="fp-next-btn" class="icon-btn"><span class="material-icons-round">skip_next</span></button>
-              </div>
-              <div class="player-controls-right">
-                <button id="fp-autoplay" class="icon-btn toggle-btn active"><span class="material-icons-round">playlist_play</span></button>
-                <button id="fp-loop" class="icon-btn toggle-btn"><span class="material-icons-round">repeat</span></button>
-                <button id="fp-pip" class="icon-btn"><span class="material-icons-round">picture_in_picture_alt</span></button>
-                <button id="fp-fullscreen" class="icon-btn"><span class="material-icons-round">fullscreen</span></button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- READ-ONLY VIDEO DETAILS + YOUTUBE ACTION LINK -->
-      <div class="full-player__details">
-        <h1 id="fp-video-title" class="video-info__title"></h1>
-        <div class="video-info__meta">
-          <span id="fp-views"></span> • <span id="fp-date"></span>
-        </div>
-        <div style="margin: 16px 0;">
-          <a id="fp-yt-link" href="#" target="_blank" rel="noopener noreferrer" class="yt-open-btn">
-            <span class="material-icons-round">open_in_new</span>
-            <span data-i18n="player.openOnYoutube">Mở trên YouTube</span>
-          </a>
-        </div>
-        <div id="fp-live-chat-container" class="hidden"></div>
-      </div>
-    </div>
-
-    <!-- SLEEP TIMER MODAL -->
+    <!-- SLEEP TIMER MODAL (YOUTUBE MINIMALIST LIST DESIGN) -->
     <div id="sleep-timer-modal" class="modal hidden">
       <div class="modal__backdrop"></div>
-      <div class="modal__sheet">
-        <div class="modal__header">
-          <span class="material-icons-round modal__header-icon">bedtime</span>
+      <div class="modal__sheet sleep-timer-yt-sheet">
+        <div class="modal__header sleep-timer-yt-header">
           <h2 class="modal__title" data-i18n="timer.title">Hẹn giờ tắt</h2>
-          <button id="sleep-timer-close" class="icon-btn"><span class="material-icons-round">close</span></button>
+          <button id="sleep-timer-close" class="icon-btn" aria-label="Close">
+            <span class="material-icons-round">close</span>
+          </button>
         </div>
-        <div class="modal__content">
-          <div class="timer-tabs">
-            <button class="timer-tab active" data-tab="minutes" data-i18n="timer.afterMinutes">Sau ... phút</button>
-            <button class="timer-tab" data-tab="hours" data-i18n="timer.afterHours">Sau ... giờ</button>
-            <button class="timer-tab" data-tab="clock" data-i18n="timer.atTime">Đến lúc ...</button>
+
+        <div class="modal__content sleep-timer-yt-body">
+          <!-- ACTIVE TIMER BADGE IF RUNNING -->
+          <div id="sleep-timer-active-badge" class="sleep-timer-active-badge hidden">
+            <div class="active-badge-info">
+              <span class="material-icons-round" style="font-size:20px; color:#ff4d4d;">hourglass_top</span>
+              <span id="active-timer-text" style="font-size:13px; font-weight:600;">Tắt sau 30 phút</span>
+            </div>
+            <button id="sleep-timer-stop-btn" class="sleep-timer-stop-btn">Tắt hẹn giờ</button>
           </div>
 
-          <div id="timer-minutes-content" class="timer-content active">
+          <!-- YOUTUBE-STYLE ELEGANT OPTION LIST -->
+          <div class="yt-timer-list">
+            <button class="yt-timer-item" data-minutes="15">
+              <span class="material-icons-round yt-timer-icon">timer</span>
+              <span>15 phút</span>
+            </button>
+            <button class="yt-timer-item" data-minutes="30">
+              <span class="material-icons-round yt-timer-icon">timer</span>
+              <span>30 phút</span>
+            </button>
+            <button class="yt-timer-item" data-minutes="45">
+              <span class="material-icons-round yt-timer-icon">timer</span>
+              <span>45 phút</span>
+            </button>
+            <button class="yt-timer-item" data-minutes="60">
+              <span class="material-icons-round yt-timer-icon">timer</span>
+              <span>60 phút</span>
+            </button>
+            <button class="yt-timer-item" data-minutes="end_of_video">
+              <span class="material-icons-round yt-timer-icon">music_note</span>
+              <span>Khi kết thúc video hiện tại</span>
+            </button>
+            <button id="yt-timer-custom-btn" class="yt-timer-item">
+              <span class="material-icons-round yt-timer-icon">tune</span>
+              <span>Tùy chỉnh số phút...</span>
+            </button>
+          </div>
+
+          <!-- EXPANDABLE CUSTOM TIME DRAWER -->
+          <div id="yt-timer-custom-drawer" class="yt-timer-custom-drawer hidden">
             <div class="timer-minutes-input">
-              <button id="timer-min-decrease" class="timer-adjust-btn"><span class="material-icons-round">remove</span></button>
+              <button id="timer-min-decrease" class="timer-adjust-btn" aria-label="Decrease">
+                <span class="material-icons-round">remove</span>
+              </button>
               <div class="timer-minutes-display">
                 <input type="number" id="timer-minutes-value" class="timer-minutes-number" value="30" min="5" max="240" />
                 <span class="timer-minutes-unit" data-i18n="timer.minuteUnit">phút</span>
               </div>
-              <button id="timer-min-increase" class="timer-adjust-btn"><span class="material-icons-round">add</span></button>
+              <button id="timer-min-increase" class="timer-adjust-btn" aria-label="Increase">
+                <span class="material-icons-round">add</span>
+              </button>
             </div>
             <input type="range" id="timer-minutes-slider" class="timer-slider" min="5" max="240" value="30" step="1" />
-            <p style="font-size:12px; color:var(--text-disabled); text-align:center; margin-top:8px;" data-i18n="timer.minWarning">Tối thiểu 5 phút</p>
+            <button id="timer-start" class="modal-btn modal-btn--primary" style="margin-top:12px; width:100%; border-radius:12px;" data-i18n="timer.start">Bắt đầu hẹn giờ</button>
           </div>
-
-          <div id="timer-hours-content" class="timer-content">
-            <div class="timer-minutes-input">
-              <input type="number" id="timer-hours-value" class="timer-minutes-number" value="1" min="1" max="24" />
-              <span class="timer-minutes-unit" data-i18n="timer.hourUnit">giờ</span>
-            </div>
-          </div>
-
-          <div id="timer-clock-content" class="timer-content">
-            <div class="timer-clock-input">
-              <div class="timer-clock-display">
-                <input type="number" id="timer-clock-hour" class="timer-clock-number" value="23" min="0" max="23" />
-                <span class="timer-clock-separator">:</span>
-                <input type="number" id="timer-clock-minute" class="timer-clock-number" value="0" min="0" max="59" />
-              </div>
-              <p id="timer-clock-info" class="timer-clock-info"></p>
-            </div>
-          </div>
-
-          <div class="timer-option">
-            <span data-i18n="timer.fadeOut">Giảm dần âm lượng (Fade out 30s)</span>
-            <label class="switch" for="timer-fadeout">
-              <input type="checkbox" id="timer-fadeout" checked />
-              <span class="switch__slider"></span>
-            </label>
-          </div>
-        </div>
-        <div class="modal__footer">
-          <button id="timer-cancel" class="modal-btn modal-btn--secondary" data-i18n="timer.cancel">Hủy hẹn giờ</button>
-          <button id="timer-start" class="modal-btn modal-btn--primary" data-i18n="timer.start">Bắt đầu hẹn giờ</button>
         </div>
       </div>
     </div>

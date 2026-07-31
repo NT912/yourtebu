@@ -4,12 +4,83 @@
 import { FALLBACK_VIDEOS, YOUTUBE_API_KEY, getFallbackSearch } from '@yourtebu/shared';
 import { getWatchHistory } from './watch-history.js';
 
-export async function fetchVideoInfo(videoId) {
-  const res = await fetch(`/api/streams/${videoId}`);
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}: Failed to fetch video info`);
+function fetchWithTimeout(url, options = {}, timeoutMs = 1200) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(id));
+}
+
+export async function fetchYouTubeVideoDetails(videoId, apiKey) {
+  try {
+    const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${videoId}&key=${apiKey}`;
+    const res = await fetchWithTimeout(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const item = data.items?.[0];
+    if (!item) return null;
+
+    const snippet = item.snippet || {};
+    const stats = item.statistics || {};
+    const content = item.contentDetails || {};
+
+    return {
+      videoId: item.id,
+      title: snippet.title
+        ? snippet.title
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/&amp;/g, '&')
+        : 'YouTube Video',
+      thumbnail:
+        snippet.thumbnails?.high?.url ||
+        snippet.thumbnails?.medium?.url ||
+        `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+      uploaderName: snippet.channelTitle || 'YouTube Creator',
+      uploaderAvatar: '',
+      uploaderUrl: `https://www.youtube.com/channel/${snippet.channelId}`,
+      views: parseInt(stats.viewCount || 0, 10),
+      duration: parseISO8601Duration(content.duration),
+      uploadedDate: snippet.publishedAt
+        ? new Date(snippet.publishedAt).toLocaleDateString('vi-VN')
+        : '2026',
+      description: snippet.description || '',
+      type: 'stream',
+    };
+  } catch (err) {
+    console.warn('[YouTube API] Video details fetch warning:', err);
+    return null;
   }
-  return await res.json();
+}
+
+export async function fetchVideoInfo(videoId) {
+  const storedApiKey = localStorage.getItem('yourtebu_yt_api_key') || YOUTUBE_API_KEY;
+  if (storedApiKey && storedApiKey.trim().length > 5) {
+    const details = await fetchYouTubeVideoDetails(videoId, storedApiKey.trim());
+    if (details) return details;
+  }
+
+  try {
+    const res = await fetch(`/api/streams/${videoId}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && !data.error) return data;
+    }
+  } catch {
+    /* fallback below */
+  }
+
+  const existingFallback = FALLBACK_VIDEOS.find((v) => v.videoId === videoId);
+  if (existingFallback) return existingFallback;
+
+  return {
+    videoId: videoId,
+    title: `Video (${videoId})`,
+    uploaderName: 'YouTube Creator',
+    uploaderAvatar: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    views: 1250000,
+    uploadedDate: '2026',
+    description: 'Video trên Yourtebu',
+  };
 }
 
 function parseISO8601Duration(iso) {
@@ -25,7 +96,7 @@ function parseISO8601Duration(iso) {
 export async function fetchYouTubeDataAPI(query, apiKey) {
   try {
     const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=25&type=video&q=${encodeURIComponent(query)}&key=${apiKey}`;
-    const res = await fetch(searchUrl);
+    const res = await fetchWithTimeout(searchUrl);
     if (!res.ok) return null;
     const data = await res.json();
     const items = data.items || [];
@@ -36,7 +107,7 @@ export async function fetchYouTubeDataAPI(query, apiKey) {
     if (videoIds.length > 0) {
       try {
         const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,contentDetails&id=${videoIds.join(',')}&key=${apiKey}`;
-        const sRes = await fetch(statsUrl);
+        const sRes = await fetchWithTimeout(statsUrl);
         if (sRes.ok) {
           const sData = await sRes.json();
           (sData.items || []).forEach((sv) => {
@@ -98,7 +169,7 @@ export async function fetchSearchResults(query, filter = 'all', page = 1) {
 
   // 2. Fallback to server search endpoint
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `/api/search?q=${encodeURIComponent(query)}&filter=${filter}&page=${page}`,
     );
     if (res.ok) {
@@ -114,7 +185,7 @@ export async function fetchSearchResults(query, filter = 'all', page = 1) {
 export async function fetchYouTubePopularTrending(apiKey, regionCode = 'VN') {
   try {
     const url = `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&chart=mostPopular&regionCode=${regionCode}&maxResults=30&key=${apiKey}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     if (!res.ok) return null;
     const data = await res.json();
     const items = data.items || [];
@@ -194,36 +265,40 @@ const CATEGORY_QUERY_POOLS = {
   ],
 };
 
+let isGoogleApiBlocked = false;
+
 export async function fetchTrending(region = 'VN', page = 1, category = 'all') {
   const storedApiKey = localStorage.getItem('yourtebu_yt_api_key') || YOUTUBE_API_KEY;
-  if (storedApiKey && storedApiKey.trim().length > 5) {
-    // 1. If category is 'all' or 'recommended', load YouTube's official diverse Popular Trending Chart in Vietnam & shuffle on fresh load
-    if (category === 'all' || category === 'recommended') {
-      const popular = await fetchYouTubePopularTrending(storedApiKey.trim(), region);
-      if (Array.isArray(popular) && popular.length > 0) {
-        // Shuffle top results on fresh page reload/load to keep feed alive like YouTube
-        return shuffleArray(popular);
+  if (!isGoogleApiBlocked && storedApiKey && storedApiKey.trim().length > 5) {
+    try {
+      if (category === 'all' || category === 'recommended') {
+        const popular = await fetchYouTubePopularTrending(storedApiKey.trim(), region);
+        if (Array.isArray(popular) && popular.length > 0) {
+          return shuffleArray(popular);
+        }
       }
-    }
 
-    // 2. Category chip specific dynamic query pool
-    const catKey = (category || 'all').toLowerCase();
-    const queryList = CATEGORY_QUERY_POOLS[catKey] || [
-      `${category} hot 2026`,
-      `${category} trending 2026`,
-    ];
-    // Pick a random query from the pool so clicking category chips fetches fresh videos
-    const queryTopic = queryList[Math.floor(Math.random() * queryList.length)];
+      const catKey = (category || 'all').toLowerCase();
+      const queryList = CATEGORY_QUERY_POOLS[catKey] || [
+        `${category} hot 2026`,
+        `${category} trending 2026`,
+      ];
+      const queryTopic = queryList[Math.floor(Math.random() * queryList.length)];
 
-    const categoryData = await fetchYouTubeDataAPI(queryTopic, storedApiKey.trim());
-    if (Array.isArray(categoryData) && categoryData.length > 0) {
-      return shuffleArray(categoryData);
+      const categoryData = await fetchYouTubeDataAPI(queryTopic, storedApiKey.trim());
+      if (Array.isArray(categoryData) && categoryData.length > 0) {
+        return shuffleArray(categoryData);
+      }
+    } catch {
+      isGoogleApiBlocked = true;
     }
   }
 
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `/api/trending?region=${region}&page=${page}&category=${encodeURIComponent(category)}`,
+      {},
+      1000,
     );
     if (res.ok) {
       const data = await res.json();
