@@ -498,8 +498,8 @@ async function renderWatchPage(videoId) {
       <!-- MAIN COLUMN (70%) -->
       <div class="watch-main">
         <div class="watch-player-wrapper">
-          <video id="watch-video" class="watch-player-video" controls autoplay playsinline webkit-playsinline src="/api/streams/media/${videoId}"></video>
-          <iframe id="watch-iframe" class="watch-player-iframe hidden" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <iframe id="watch-iframe" class="watch-player-iframe" src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&playsinline=1" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+          <video id="watch-video" class="watch-player-video hidden" controls playsinline webkit-playsinline></video>
           
           <div id="watch-player-error" class="watch-player-error hidden">
             <span class="material-icons-round" style="font-size:48px; color:#ff4d4d; margin-bottom:12px;">wifi_off</span>

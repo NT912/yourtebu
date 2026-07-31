@@ -1,5 +1,31 @@
 /* Responsive Layout Rules */
 @media (max-width: 767px) {
+  .header {
+    padding: 0 8px;
+    gap: 4px;
+  }
+  .header__logo span {
+    font-size: 16px;
+  }
+  .header__center {
+    max-width: none;
+    flex: 1;
+    margin: 0 2px;
+  }
+  .header__search-input {
+    font-size: 13px;
+    padding: 0 8px;
+  }
+  .header__search-btn {
+    width: 36px;
+  }
+  #btn-lang-toggle,
+  #btn-audio-mode {
+    display: none !important;
+  }
+  .user-name-text {
+    display: none !important;
+  }
   .sidebar {
     display: none;
   }
@@ -9,6 +35,10 @@
   .main-content {
     margin-left: 0;
     padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom));
+  }
+  .watch-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 }
 
